@@ -1,275 +1,297 @@
-import React, { useState } from 'react';
-import { useDemo } from '../context/DemoContext';
+import React, { useMemo, useState } from 'react';
+import { AlertTriangle, MapPin, Route, Clock, ShieldCheck, Megaphone } from 'lucide-react';
 import { TopBar } from '../components/TopBar';
-import { DecisionChip, EstTag } from '../components/Badges';
-import { evaluateApproachZoneDecision, SCRIPTED_SCENARIOS, runScriptedScenario, parseClockTime } from '../utils/decisionEngine';
-import { ChevronDown, ChevronRight, CheckCircle2, MessageSquare, CornerUpRight, PauseCircle } from 'lucide-react';
+import { DecisionChip, EstTag, Pill, RiskBadge, RoadStateBadge } from '../components/Badges';
+import { Button, Card, CardHeader, PageBody, Tabs, Td, Th, cx } from '../components/ui';
+import { useApp } from '../state/AppContext';
+import { useCorridor } from '../state/selectors';
+import { api } from '../api';
+import { SCRIPTED_SCENARIOS, runScriptedScenario } from '../domain/decisionEngine';
+import { ALERT_LANGUAGES, renderTemplate } from '../domain/alerts';
+import { AlertFields, AlertTemplate, ApproachZone, DecisionResult, ZoneDecision } from '../types';
+import { fmtClock, fmtTime, fmtWait } from '../lib/format';
+
+const Line: React.FC<{ icon: React.ReactNode; label: string; children: React.ReactNode }> = ({ icon, label, children }) => (
+  <div className="flex items-start gap-2 text-[13px]">
+    <span className="text-[#6B7280] mt-0.5">{icon}</span>
+    <span className="text-[#6B7280] w-24 shrink-0">{label}</span>
+    <span className="text-[#1F2933] font-medium min-w-0">{children}</span>
+  </div>
+);
+
+function holdingText(r: DecisionResult) {
+  if (r.decision !== 'HOLD') return r.holdingPoint ? `${r.holdingPoint.shortName} · standby` : '—';
+  return r.holdingPoint ? r.holdingPoint.name : 'No eligible holding point';
+}
+
+const ZoneCard: React.FC<{ zone: ApproachZone; d: ZoneDecision }> = ({ zone, d }) => {
+  const { can, act } = useApp();
+  const { segments } = useCorridor();
+  const seg = segments[zone.segmentId];
+  const r = d.result;
+  const controlRoom = can('approve_closure');
+  const hasDiversion = (zone.diversionRoutes?.length ?? 0) > 0;
+
+  return (
+    <Card>
+      <div className="px-4 py-3 border-b border-[#E7E3DA] flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold">
+            <span className="font-mono mr-1.5">{zone.id}</span>
+            <span className="text-[#6B7280] font-medium">{zone.direction} · km {zone.locationKm.toFixed(1)}</span>
+          </div>
+          <div className="text-xs text-[#6B7280] mt-0.5 flex items-center gap-1.5 flex-wrap">
+            <span>{seg.id} {seg.name}</span>
+            <RiskBadge level={seg.riskLevel} />
+            <RoadStateBadge state={seg.roadState} />
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <DecisionChip decision={r.decision} size="lg" />
+          {d.heavyResult && (
+            <span className="flex items-center gap-1 text-[11px] text-[#6B7280]">
+              Heavy <DecisionChip decision={d.heavyResult.decision} />
+            </span>
+          )}
+          {r.closeRecommended && <DecisionChip decision="CLOSE" />}
+        </div>
+      </div>
+
+      <div className="px-4 py-3 space-y-2">
+        <Line icon={<ShieldCheck className="w-3.5 h-3.5" />} label="Rule">
+          <span className="font-mono">{r.ruleId}</span>
+        </Line>
+        <Line icon={<MapPin className="w-3.5 h-3.5" />} label="Holding">
+          {holdingText(r)}
+          {r.decision === 'HOLD' && r.holdingPoint?.provisional && <Pill tone="grey" className="ml-1.5 !text-[10px]">Provisional</Pill>}
+        </Line>
+        {(hasDiversion || r.decision === 'DIVERT') && (
+          <Line icon={<Route className="w-3.5 h-3.5" />} label="Diversion">
+            {r.diversionCheck.isOffered ? r.diversionCheck.routeCandidateName : 'No safe diversion'}
+          </Line>
+        )}
+        <Line icon={<Clock className="w-3.5 h-3.5" />} label="Expected wait">
+          {r.expectedWaitMinutes !== undefined ? (
+            <span className="inline-flex items-center gap-1.5">
+              {fmtWait(r.expectedWaitMinutes)} <EstTag />
+            </span>
+          ) : (
+            '—'
+          )}
+        </Line>
+        {controlRoom && r.windowClosing && (
+          <div className="px-2.5 py-1.5 rounded-md bg-[#FBF1CC] border border-[#F3E29F] text-[#7A5B00] text-xs font-medium flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5" /> Window closing
+          </div>
+        )}
+        {d.officerClearedPassage && (
+          <div className="text-xs text-[#2A649C]">Passage cleared · {d.officerClearedPassage.by} · {fmtTime(d.officerClearedPassage.at)}</div>
+        )}
+      </div>
+
+      <div className="px-4 py-2.5 border-t border-[#E7E3DA] flex items-center justify-between gap-2">
+        <span className="text-[11px] text-[#6B7280]">Since {fmtTime(d.at)}</span>
+        {can('clear_passage') && seg.riskLevel === 'ORANGE' && seg.roadState === 'OPEN' && !d.officerClearedPassage && (
+          <Button size="sm" onClick={() => act(s => api.clearPassage(s, zone.id), `${zone.id} passage cleared`)}>
+            Clear passage
+          </Button>
+        )}
+      </div>
+    </Card>
+  );
+};
+
+function travellerFields(zone: ApproachZone, d: ZoneDecision, segName: string, estimate?: string): AlertFields {
+  const r = d.result;
+  const template: AlertTemplate = r.closeRecommended ? (r.decision === 'DIVERT' ? 'DIVERT' : 'CLOSE') : r.decision === 'HOLD' ? 'HOLD' : 'CAUTION';
+  return {
+    segmentId: zone.segmentId,
+    place: segName,
+    template,
+    zones: [
+      {
+        zoneId: zone.id,
+        direction: zone.direction,
+        decision: r.decision,
+        place: r.decision === 'HOLD' ? r.holdingPoint?.shortName : r.decision === 'DIVERT' ? r.diversionCheck.routeCandidateName : undefined
+      }
+    ],
+    noSafeDiversion: r.decision === 'HOLD' && r.closeRecommended,
+    reopeningEstimate: r.decision === 'HOLD' && estimate ? fmtClock(estimate) : undefined,
+    certainty: 'Likely'
+  };
+}
+
+const TravellerPreview: React.FC = () => {
+  const { snap, segments, decisionByZone, openIncidentBySegment } = useCorridor();
+  const [zoneId, setZoneId] = useState(() => (snap.zones.find(z => ['HOLD', 'DIVERT'].includes(decisionByZone[z.id]?.result.decision)) ?? snap.zones[0])?.id);
+  const [lang, setLang] = useState<'en' | 'hi' | 'as' | 'bn' | 'dis'>('en');
+  const zone = snap.zones.find(z => z.id === zoneId)!;
+  const d = decisionByZone[zone.id];
+  const seg = segments[zone.segmentId];
+  const inc = openIncidentBySegment[zone.segmentId];
+  const fields = travellerFields(zone, d, seg.name, inc?.reopeningEstimate);
+  const r = d.result;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+      <Card className="lg:col-span-4">
+        <CardHeader title="Approach zone" />
+        <div className="divide-y divide-[#E7E3DA]">
+          {snap.zones.map(z => (
+            <button
+              key={z.id}
+              onClick={() => setZoneId(z.id)}
+              className={cx('w-full px-4 py-2.5 flex items-center justify-between text-left', z.id === zoneId ? 'bg-[#3780C8]/10' : 'hover:bg-[#FAF8F3]')}
+            >
+              <span className="text-[13px]">
+                <span className="font-mono font-medium mr-1.5">{z.id}</span>
+                <span className="text-[#6B7280]">{z.direction}</span>
+              </span>
+              <DecisionChip decision={decisionByZone[z.id].result.decision} />
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="lg:col-span-8">
+        <CardHeader
+          title={`Traveller message · ${zone.id}`}
+          right={
+            <div className="flex gap-1">
+              {ALERT_LANGUAGES.map(l => (
+                <button
+                  key={l.code}
+                  onClick={() => setLang(l.code)}
+                  className={cx('px-2 h-7 rounded-md text-xs font-medium', lang === l.code ? 'bg-[#3780C8] text-white' : 'text-[#6B7280] hover:bg-[#FAF8F3]')}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          }
+        />
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-[#E7E3DA] bg-[#FAF8F3] p-4 space-y-3">
+            <DecisionChip decision={r.decision} size="lg" />
+            <div className="text-[15px] font-semibold text-[#1F2933]">
+              {r.decision === 'HOLD' ? `Hold at ${r.holdingPoint?.shortName ?? '—'}` : r.decision === 'DIVERT' ? `Divert via ${r.diversionCheck.routeCandidateName}` : r.decision === 'GO_CAUTION' ? 'Proceed with caution' : 'Road open'}
+            </div>
+            <div className="text-[13px] text-[#6B7280]">{seg.id} {seg.name}</div>
+            {r.decision === 'HOLD' && r.closeRecommended && <div className="text-[13px]">No safe diversion</div>}
+            {r.decision === 'HOLD' && (
+              <div className="text-[13px] flex items-center gap-1.5">
+                Reopening {inc?.reopeningEstimate ? fmtClock(inc.reopeningEstimate) : '—'} <EstTag />
+              </div>
+            )}
+            {r.decision === 'HOLD' && r.holdingPoint && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {r.holdingPoint.facilities.map(f => (
+                  <Pill key={f} tone="grey" className="!text-[11px]">{f}</Pill>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Text</div>
+            {lang === 'dis' ? (
+              <Pill tone="yellow">Native-speaker template pending</Pill>
+            ) : (
+              <div className="rounded-md border border-[#E7E3DA] p-3 text-[13px] leading-relaxed">{renderTemplate(fields, lang)}</div>
+            )}
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+const RuleChecks: React.FC = () => {
+  const results = useMemo(() => SCRIPTED_SCENARIOS.map(s => ({ s, r: runScriptedScenario(s) })), []);
+  const passed = results.filter(x => x.r.passed).length;
+  return (
+    <Card>
+      <CardHeader
+        title="Scripted scenarios · SM1"
+        right={<Pill tone={passed === results.length ? 'green' : 'red'}>{passed}/{results.length} correct</Pill>}
+      />
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-[#FAF8F3] border-b border-[#E7E3DA]">
+            <tr>
+              <Th>ID</Th>
+              <Th>Scenario</Th>
+              <Th>Expected</Th>
+              <Th>Actual</Th>
+              <Th>Rule</Th>
+              <Th>Result</Th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#E7E3DA]">
+            {results.map(({ s, r }) => (
+              <tr key={s.id}>
+                <Td className="font-mono">{s.id}</Td>
+                <Td>{s.name}</Td>
+                <Td><DecisionChip decision={s.expectedDecision} /></Td>
+                <Td><DecisionChip decision={r.actualDecision} /></Td>
+                <Td className="font-mono text-xs">{r.actualRuleId}</Td>
+                <Td><Pill tone={r.passed ? 'green' : 'red'}>{r.passed ? 'PASS' : 'FAIL'}</Pill></Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+};
 
 export const DecisionsPage: React.FC = () => {
-  const { approachZones, segments, holdingPoints, incident } = useDemo();
-  const [activeTab, setActiveTab] = useState<'cards' | 'traveller'>('cards');
-  const [selectedZoneId, setSelectedZoneId] = useState<string>('AZ-07N');
-  const [ruleChecksOpen, setRuleChecksOpen] = useState<boolean>(false);
-  const [travellerLang, setTravellerLang] = useState<'en' | 'hi' | 'as' | 'dimasa'>('en');
-
-  // Scripted scenario test results
-  const testResults = SCRIPTED_SCENARIOS.map(s => ({
-    scenario: s,
-    result: runScriptedScenario(s)
-  }));
-  const passedCount = testResults.filter(t => t.result.passed).length;
-
-  const reopeningEstimate = parseClockTime(incident.reopeningEstimate);
-  const formatWait = (min?: number) =>
-    min === undefined ? '—' : `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`;
-
-  const selectedZone = approachZones.find(z => z.id === selectedZoneId) || approachZones[0];
-  const targetSeg = segments[selectedZone.segmentId] || segments['S-07'];
-  const activeDecision = evaluateApproachZoneDecision(selectedZone, targetSeg, segments, holdingPoints, { reopeningEstimate });
-
-  const travellerTexts = {
-    en: {
-      hold: 'Hold at Haflong',
-      detail: 'Road ahead blocked between Jatinga and Harangajao',
-      diversion: 'No safe diversion',
-      facilities: 'Facilities: food, fuel, shelter, medical aid'
-    },
-    hi: {
-      hold: 'हाफलोंग में रुकें (HOLD)',
-      detail: 'जटिंगा और हरंगजाओ के बीच मार्ग अवरुद्ध',
-      diversion: 'कोई सुरक्षित वैकल्पिक मार्ग नहीं',
-      facilities: 'सुविधाएं: भोजन, ईंधन, विश्राम केंद्र, चिकित्सा'
-    },
-    as: {
-      hold: 'হাফলঙত ৰওক (HOLD)',
-      detail: 'জাতিংগা আৰু হাৰাংগাজাওৰ মাজত পথ বন্ধ',
-      diversion: 'কোনো সুৰক্ষিত বিকল্প পথ নাই',
-      facilities: 'সুবিধাসমূহ: খাদ্য, ইন্ধন, আশ্ৰয়স্থল, চিকিৎসা'
-    },
-    dimasa: {
-      hold: 'Haflong ha thikhnani (HOLD)',
-      detail: 'Jatinga aroni Harangajao gajao lama phan dong',
-      diversion: 'Gasa lama dongya',
-      facilities: 'Subida: jiba, thikhna, doro'
-    }
-  };
-
-  const currentMsg = travellerTexts[travellerLang];
+  const { can, act } = useApp();
+  const { snap, segments, decisionByZone } = useCorridor();
+  const [tab, setTab] = useState<'zones' | 'traveller' | 'checks'>('zones');
+  const bySegment = useMemo(() => {
+    const m = new Map<string, ApproachZone[]>();
+    snap.zones.forEach(z => m.set(z.segmentId, [...(m.get(z.segmentId) ?? []), z]));
+    return [...m.entries()];
+  }, [snap.zones]);
+  const pendingAlert = (segId: string) => snap.approvals.some(a => a.kind === 'alert' && a.segmentId === segId && (a.status === 'pending' || a.status === 'escalated'));
 
   return (
     <div className="flex flex-col min-h-screen">
       <TopBar title="Decisions" />
-
-      <div className="p-6 space-y-5 max-w-[1720px] w-full mx-auto">
-        
-        {/* Tabs: Decisions vs Traveller message */}
-        <div className="flex items-center gap-1 border-b border-[#E7E3DA] pb-2 text-xs">
-          <button
-            onClick={() => setActiveTab('cards')}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'cards'
-                ? 'bg-[#3780C8] text-white'
-                : 'text-[#6B7280] hover:text-[#1F2933]'
-            }`}
-          >
-            Approach zones ({approachZones.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('traveller')}
-            className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
-              activeTab === 'traveller'
-                ? 'bg-[#3780C8] text-white'
-                : 'text-[#6B7280] hover:text-[#1F2933]'
-            }`}
-          >
-            Traveller message
-          </button>
-        </div>
-
-        {/* Tab 1: Grid of approach-zone cards */}
-        {activeTab === 'cards' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-            {approachZones.map(zone => {
-              const seg = segments[zone.segmentId] || segments['S-07'];
-              const res = evaluateApproachZoneDecision(zone, seg, segments, holdingPoints, { reopeningEstimate });
-              const hp = res.holdingPoint;
-              const isEligible = res.holdingEligibility.isEligible;
-              const diversionText = res.diversionCheck.isOffered 
-                ? (res.diversionCheck.routeCandidateName || 'Checked route') 
-                : 'No safe diversion';
-
-              return (
-                <div
-                  key={zone.id}
-                  className="bg-white rounded-lg border border-[#E7E3DA] p-4 shadow-xs space-y-3"
-                >
-                  {/* Top row: Zone ID, direction, segment ahead, decision chip */}
-                  <div className="flex items-start justify-between gap-2 border-b border-[#E7E3DA] pb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-semibold px-1.5 py-0.5 rounded bg-[#FAF8F3] border border-[#E7E3DA] text-[#1F2933]">
-                          {zone.id}
-                        </span>
-                        <span className="font-semibold text-sm text-[#1F2933]">
-                          {zone.name}
-                        </span>
-                      </div>
-                      <div className="text-xs text-[#6B7280] mt-1">
-                        {zone.direction} · {zone.targetSegmentName} ({zone.locationKm})
-                      </div>
-                    </div>
-
-                    <DecisionChip decision={res.decision} size="lg" />
-                  </div>
-
-                  {/* Summary items: Holding point, Diversion result, Expected wait */}
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="p-2.5 rounded bg-[#FAF8F3] border border-[#E7E3DA] space-y-0.5">
-                      <span className="text-[11px] text-[#6B7280] block">Holding point</span>
-                      <span className="font-medium text-[#1F2933] block truncate">
-                        {hp ? `${hp.name.split(' ')[0]} · ${isEligible ? 'eligible' : 'ineligible'}` : 'None'}
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 rounded bg-[#FAF8F3] border border-[#E7E3DA] space-y-0.5">
-                      <span className="text-[11px] text-[#6B7280] block">Diversion</span>
-                      <span className="font-medium text-[#1F2933] block truncate">
-                        {diversionText}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Bottom row: expected wait & rule ID */}
-                  <div className="flex items-center justify-between pt-1 text-xs">
-                    <div className="text-[#1F2933]">
-                      <span className="text-[#6B7280]">Expected wait: </span>
-                      <span className="font-mono font-medium">{formatWait(res.expectedWaitMinutes)}</span>
-                      {res.expectedWaitMinutes !== undefined && <EstTag className="ml-1" />}
-                    </div>
-
-                    <div className="font-mono text-[11px] text-[#6B7280]">
-                      {res.ruleId}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Tab 2: Traveller message mockup */}
-        {activeTab === 'traveller' && (
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-            
-            {/* Phone Mockup (5 cols) */}
-            <div className="md:col-span-5 flex justify-center">
-              <div className="w-[340px] rounded-3xl bg-[#1F2933] p-3 shadow-xl border-2 border-[#E7E3DA]">
-                <div className="bg-[#FAF8F3] rounded-2xl overflow-hidden min-h-[520px] flex flex-col p-4 space-y-4 text-xs text-[#1F2933]">
-                  
-                  {/* Phone Header */}
-                  <div className="flex items-center justify-between pb-2 border-b border-[#E7E3DA]">
-                    <span className="font-semibold text-xs text-[#1F2933]">NH-27 Pass</span>
-                    <div className="flex gap-1 text-[10px]">
-                      {(['en', 'hi', 'as', 'dimasa'] as const).map(l => (
-                        <button
-                          key={l}
-                          onClick={() => setTravellerLang(l)}
-                          className={`px-1.5 py-0.5 rounded font-medium ${
-                            travellerLang === l ? 'bg-[#3780C8] text-white' : 'text-[#6B7280]'
-                          }`}
-                        >
-                          {l.toUpperCase()}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Large Message Card */}
-                  <div className="p-4 rounded-xl border border-[#F3E29F] bg-[#FBF1CC] text-[#7A5B00] space-y-2">
-                    <div className="font-bold text-sm">
-                      {currentMsg.hold}
-                    </div>
-                    <div className="text-xs">
-                      {currentMsg.detail}
-                    </div>
-                    <div className="text-[11px] pt-1 border-t border-[#F3E29F]">
-                      Reopening: <b>~{incident.reopeningEstimate || '4:00 PM'}</b> <EstTag />
-                    </div>
-                  </div>
-
-                  {/* Diversion note */}
-                  <div className="p-3 rounded-lg border border-[#E7E3DA] bg-white text-[11px] text-[#6B7280]">
-                    {currentMsg.diversion}
-                  </div>
-
-                  {/* Facilities */}
-                  <div className="p-3 rounded-lg border border-[#E7E3DA] bg-white text-[11px] space-y-1">
-                    <div className="font-semibold text-[#1F2933]">Haflong Holding Area</div>
-                    <div className="text-[#6B7280]">{currentMsg.facilities}</div>
-                  </div>
-
-                </div>
+      <PageBody>
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          items={[
+            { id: 'zones', label: 'Approach zones', count: snap.zones.length },
+            { id: 'traveller', label: 'Traveller message' },
+            { id: 'checks', label: 'Rule checks' }
+          ]}
+        />
+        {tab === 'zones' &&
+          bySegment.map(([segId, zones]) => (
+            <div key={segId} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-[13px] font-semibold text-[#1F2933]">
+                  {segId} {segments[segId].name}
+                </h2>
+                {can('approve_alert') && (
+                  <Button size="sm" icon={<Megaphone className="w-3.5 h-3.5" />} disabled={pendingAlert(segId)} onClick={() => act(s => api.draftAlert(s, segId), `Alert drafted · ${segId}`)}>
+                    {pendingAlert(segId) ? 'Alert awaiting approval' : 'Draft alert'}
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {zones.map(z => (
+                  <ZoneCard key={z.id} zone={z} d={decisionByZone[z.id]} />
+                ))}
               </div>
             </div>
-
-            {/* SMS Preview (7 cols) */}
-            <div className="md:col-span-7 bg-white rounded-lg border border-[#E7E3DA] p-5 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-[#E7E3DA] pb-2">
-                <span className="font-semibold text-xs text-[#1F2933]">SMS query & reply</span>
-                <span className="font-mono text-[11px] text-[#6B7280]">51969</span>
-              </div>
-
-              <div className="p-4 rounded-lg bg-[#FAF8F3] border border-[#E7E3DA] space-y-3 font-mono text-xs">
-                <div className="flex justify-end">
-                  <span className="px-3 py-1.5 rounded-lg bg-[#3780C8] text-white">
-                    NH27 HAFLONG
-                  </span>
-                </div>
-                <div className="flex justify-start">
-                  <span className="px-3 py-1.5 rounded-lg bg-white border border-[#E7E3DA] text-[#1F2933] max-w-sm">
-                    NH-27 S-07 BLOCKED. HOLD at Haflong. Est. reopening ~{incident.reopeningEstimate || '4:00 PM'}. No safe diversion.
-                  </span>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        )}
-
-        {/* Collapsed "Rule checks · 12/12 passed" row at bottom */}
-        <div className="border border-[#E7E3DA] rounded-lg bg-white overflow-hidden shadow-xs">
-          <button
-            onClick={() => setRuleChecksOpen(prev => !prev)}
-            className="w-full px-4 py-3 flex items-center justify-between text-xs font-semibold text-[#1F2933] hover:bg-[#FAF8F3] transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className={`w-4 h-4 ${passedCount === testResults.length ? 'text-[#2F6B45]' : 'text-[#9B2C2C]'}`} />
-              <span>Rule checks · {passedCount}/{testResults.length} passed</span>
-            </div>
-            {ruleChecksOpen ? <ChevronDown className="w-4 h-4 text-[#6B7280]" /> : <ChevronRight className="w-4 h-4 text-[#6B7280]" />}
-          </button>
-
-          {ruleChecksOpen && (
-            <div className="p-4 border-t border-[#E7E3DA] bg-[#FAF8F3] divide-y divide-[#E7E3DA] text-xs">
-              {testResults.map(({ scenario, result }) => (
-                <div key={scenario.id} className="py-2 flex items-center justify-between">
-                  <div>
-                    <span className="font-mono font-medium text-[#1F2933] mr-2">{scenario.id}</span>
-                    <span className="text-[#6B7280]">{scenario.name}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-[11px] text-[#6B7280]">{result.actualRuleId}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${result.passed ? 'bg-[#DFF1E5] text-[#2F6B45]' : 'bg-[#F8D7D7] text-[#9B2C2C]'}`}>
-                      {result.passed ? 'PASS' : 'FAIL'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-      </div>
+          ))}
+        {tab === 'traveller' && <TravellerPreview />}
+        {tab === 'checks' && <RuleChecks />}
+      </PageBody>
     </div>
   );
 };

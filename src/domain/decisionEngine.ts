@@ -10,6 +10,8 @@ import {
 
 export interface EvaluateOptions {
   vehicleType?: 'all' | 'heavy' | 'light';
+  /** BR-01: officer may clear passage through an Orange segment (logged). */
+  officerClearedPassage?: boolean;
   /** Officer-entered reopening estimate; expected wait = estimate - now (labelled est.). */
   reopeningEstimate?: Date;
   now?: Date;
@@ -214,9 +216,8 @@ export function evaluateApproachZoneDecision(
     ? Math.max(0, Math.round((options.reopeningEstimate.getTime() - now.getTime()) / 60000))
     : undefined;
 
-  const warnings = (targetSegment.inputs?.warnings || '').toLowerCase();
-  const hasImdWarning = warnings.includes('imd') &&
-    (warnings.includes('heavy') || warnings.includes('orange') || warnings.includes('red'));
+  // BR-11: IMD heavy-rainfall warning (Orange or Red) for the district.
+  const hasImdWarning = targetSegment.inputs?.imdWarning === 'ORANGE' || targetSegment.inputs?.imdWarning === 'RED';
   const isWindowClosing = targetSegment.riskLevel === 'YELLOW' && hasImdWarning;
 
   const base = { holdingPoint, holdingEligibility, diversionCheck: diversionCheckResult, windowClosing: false, closeRecommended: false };
@@ -247,6 +248,16 @@ export function evaluateApproachZoneDecision(
   }
 
   // RULE 2: ORANGE -> HOLD before entry (checked before restrictions/unknown: BR-02)
+  if (targetSegment.riskLevel === 'ORANGE' && options.officerClearedPassage) {
+    return {
+      ...base,
+      decision: 'GO_CAUTION',
+      ruleId: 'R-ORANGE-OFFICER-CLEARED',
+      ruleExplanation: `${targetSegment.id} ORANGE risk. Passage cleared by officer (logged).`,
+      actionText: 'GO with caution (officer-cleared passage)',
+      travellerAdvisory: `Passage cleared by officer. Follow police directions.`
+    };
+  }
   if (targetSegment.riskLevel === 'ORANGE') {
     return {
       ...base,
@@ -457,6 +468,22 @@ export const SCRIPTED_SCENARIOS: ScriptedScenario[] = [
     expectedDecision: 'GO_CAUTION',
     expectedRuleId: 'R-NODATA-UNKNOWN',
     setup: { roadState: 'UNKNOWN', riskLevel: 'GREEN' }
+  },
+  {
+    id: 'SC-13',
+    name: 'One-way and Orange (precedence)',
+    description: 'RESTRICTED_ONE_WAY with Orange risk -> most restrictive wins: HOLD (AC-07)',
+    expectedDecision: 'HOLD',
+    expectedRuleId: 'R-ORANGE-HOLD',
+    setup: { roadState: 'RESTRICTED_ONE_WAY', riskLevel: 'ORANGE' }
+  },
+  {
+    id: 'SC-14',
+    name: 'Red risk on open road',
+    description: 'Road OPEN, Red risk, no safe diversion -> HOLD, CLOSE recommended',
+    expectedDecision: 'HOLD',
+    expectedRuleId: 'R-BLOCKED-RED-HOLD',
+    setup: { roadState: 'OPEN', riskLevel: 'RED', diversionSafe: false }
   }
 ];
 
@@ -466,134 +493,50 @@ export function runScriptedScenario(scenario: ScriptedScenario): {
   actualRuleId: string;
   details: string;
 } {
-  const dummySegment: Segment = {
-    id: 'S-07',
-    name: 'S-07 Jatinga–Harangajao',
-    kmRange: 'km 166–178',
-    startKm: 166,
-    endKm: 178,
-    coordinates: [[25.12, 92.99], [25.05, 92.89]],
-    center: [25.08, 92.94],
-    roadState: scenario.setup.roadState,
-    riskLevel: scenario.setup.riskLevel,
+  const mk = (id: string, roadState: RoadState, riskLevel: RiskLevel, imd: 'NONE' | 'ORANGE' = 'NONE'): Segment => ({
+    id,
+    name: `${id} scripted`,
+    startKm: 0,
+    endKm: 1,
+    coordinates: [[25.1, 92.9], [25.11, 92.91]],
+    center: [25.1, 92.9],
+    roadState,
+    riskLevel,
+    riskIndex: null,
     reasons: ['Scripted test input'],
-    freshness: '1m ago',
-    validUntil: '5h 59m',
+    computedAt: '2026-11-01T09:00:00+05:30',
+    validUntil: '2026-11-01T15:00:00+05:30',
     inputs: {
-      susceptibility: 'High',
-      slope: '34°',
-      rainfall24h: 80,
-      rainfall3d: 140,
-      rainfall7d: 220,
-      pastIncidents: 4,
-      warnings: scenario.setup.hasImdWarning ? 'IMD Orange Warning: Heavy rainfall' : 'None',
-      freshness: 'Just now'
-    },
-    lengthKm: 12,
-    elevationM: 610
-  };
-
-  const dummyAllSegments: Record<string, Segment> = {
-    'S-07': dummySegment,
-    'S-05': {
-      id: 'S-05',
-      name: 'S-05 Maibong–Mahur',
-      kmRange: 'km 146–156',
-      startKm: 146,
-      endKm: 156,
-      coordinates: [[25.30, 93.17], [25.24, 93.10]],
-      center: [25.27, 93.13],
-      roadState: 'OPEN',
-      riskLevel: 'GREEN',
-      reasons: ['Stable stretch'],
-      freshness: '5m ago',
-      validUntil: '6h',
-      inputs: {
-        susceptibility: 'Low',
-        slope: '14°',
-        rainfall24h: 12,
-        rainfall3d: 25,
-        rainfall7d: 40,
-        pastIncidents: 0,
-        warnings: 'None',
-        freshness: '5m ago'
-      },
-      lengthKm: 10,
-      elevationM: 520
-    },
-    'DIV-01': {
-      id: 'DIV-01',
-      name: 'Alternative Bypass Road',
-      kmRange: 'km 0–15',
-      startKm: 0,
-      endKm: 15,
-      coordinates: [[25.15, 93.00], [25.02, 92.85]],
-      center: [25.08, 92.92],
-      roadState: scenario.setup.diversionSafe ? 'OPEN' : 'BLOCKED',
-      riskLevel: scenario.setup.diversionSafe ? 'GREEN' : 'RED',
-      reasons: ['Bypass route'],
-      freshness: '2m ago',
-      validUntil: '6h',
-      inputs: {
-        susceptibility: 'Moderate',
-        slope: '18°',
-        rainfall24h: 20,
-        rainfall3d: 35,
-        rainfall7d: 50,
-        pastIncidents: 0,
-        warnings: 'None',
-        freshness: '2m ago'
-      },
-      lengthKm: 15,
-      elevationM: 450
+      susceptibility: 'High', slopeDeg: 34, rainfall24h: 80, rainfall3d: 140, rainfall7d: 220,
+      pastIncidents: 4, imdWarning: imd, gsiBulletin: false, updatedAt: '2026-11-01T09:00:00+05:30', sample: true
     }
+  });
+
+  const target = mk('S-07', scenario.setup.roadState, scenario.setup.riskLevel, scenario.setup.hasImdWarning ? 'ORANGE' : 'NONE');
+  const all: Record<string, Segment> = {
+    'S-07': target,
+    'S-05': mk('S-05', 'OPEN', 'GREEN'),
+    'DIV-01': scenario.setup.diversionSafe ? mk('DIV-01', 'OPEN', 'GREEN') : mk('DIV-01', 'BLOCKED', 'RED')
+  };
+  if (scenario.id === 'SC-07') all['DIV-01'] = mk('DIV-01', 'OPEN', 'NO_DATA');
+
+  const hp: SafeHoldingPoint = {
+    id: 'HP-HAFLONG', name: 'Haflong Safe Holding Area', shortName: 'Haflong', locationName: 'Haflong',
+    facilities: [], segmentId: 'S-05', capacityVehicles: 300, provisional: false
+  };
+  const zone: ApproachZone = {
+    id: 'AZ-07N', name: 'AZ-07N', direction: 'Southbound', segmentId: 'S-07', center: [25.1, 92.9],
+    extentKm: 2.5, locationKm: 164, nearestHoldingPointId: 'HP-HAFLONG',
+    diversionRoutes: [{ name: 'Bypass Road', segmentIds: ['DIV-01'] }]
   };
 
-  const dummyHoldingPoint: SafeHoldingPoint = {
-    id: 'HP-HAFLONG',
-    name: 'Haflong Safe Holding Area',
-    locationName: 'Haflong Junction Staging Area',
-    facilities: ['Food stalls', 'Fuel', 'Emergency shelter', 'Heavy vehicle staging'],
-    segmentId: 'S-05',
-    capacityVehicles: 300,
-    currentOccupancy: 45,
-    statusNote: 'Operational'
-  };
-
-  const dummyZone: ApproachZone = {
-    id: 'AZ-07N',
-    name: 'AZ-07N from Haflong side',
-    direction: 'Northbound',
-    segmentId: 'S-07',
-    targetSegmentName: 'S-07 Jatinga–Harangajao',
-    nearestHoldingPointId: 'HP-HAFLONG',
-    locationKm: 'km 164',
-    diversionRoutes: [
-      {
-        name: 'Bypass Road',
-        description: 'Via bypass road',
-        segmentIds: ['DIV-01']
-      }
-    ]
-  };
-
-  const result = evaluateApproachZoneDecision(
-    dummyZone,
-    dummySegment,
-    dummyAllSegments,
-    { 'HP-HAFLONG': dummyHoldingPoint },
-    { vehicleType: scenario.setup.vehicleType }
-  );
-
-  const decisionMatches = result.decision === scenario.expectedDecision;
-  const ruleMatches = result.ruleId === scenario.expectedRuleId;
-  const passed = decisionMatches && ruleMatches;
-
+  const result = evaluateApproachZoneDecision(zone, target, all, { 'HP-HAFLONG': hp }, { vehicleType: scenario.setup.vehicleType });
+  const passed = result.decision === scenario.expectedDecision && result.ruleId === scenario.expectedRuleId;
   return {
     passed,
     actualDecision: result.decision,
     actualRuleId: result.ruleId,
-    details: passed 
+    details: passed
       ? `Matched rule ${result.ruleId} and decision ${result.decision}`
       : `Expected ${scenario.expectedDecision} (${scenario.expectedRuleId}) but got ${result.decision} (${result.ruleId})`
   };

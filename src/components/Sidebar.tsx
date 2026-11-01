@@ -1,155 +1,77 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { useDemo } from '../context/DemoContext';
-import { DemoRole } from '../types';
-import { 
-  Map, 
-  FileText, 
-  GitBranch, 
-  FileCheck2, 
-  AlertOctagon, 
-  Settings, 
-  ChevronUp, 
-  Shield 
-} from 'lucide-react';
-
-const ROLE_DISPLAY: Record<DemoRole, string> = {
-  control_officer: 'Officer',
-  second_approver: 'Second Approver',
-  road_engineer: 'Road Engineer',
-  patrol: 'Highway Patrol',
-  traveller: 'Traveller',
-  admin: 'Administrator'
-};
+import { LogOut, Shield } from 'lucide-react';
+import { useApp } from '../state/AppContext';
+import { NAV } from '../navigation';
+import { ROLE_LABEL } from '../domain/permissions';
+import { cx } from './ui';
 
 export const Sidebar: React.FC = () => {
-  const { currentRole, setRole, pendingApprovalsCount, setIsSettingsOpen } = useDemo();
-  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
-
-  const navItems = [
-    { name: 'Corridor', path: '/', icon: Map },
-    { name: 'Reports', path: '/reports', icon: FileText },
-    { name: 'Decisions', path: '/decisions', icon: GitBranch },
-    { 
-      name: 'Approvals', 
-      path: '/approvals', 
-      icon: FileCheck2, 
-      badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined 
-    },
-    { name: 'Incidents', path: '/incidents', icon: AlertOctagon }
-  ];
+  const { session, snapshot, logout, apiMode } = useApp();
+  if (!session) return null;
+  const openApprovals = snapshot?.approvals.filter(a => a.status === 'pending' || a.status === 'escalated').length ?? 0;
+  const queue = snapshot?.reports.filter(r => (r.route === 'officer_queue' || r.route === 'manual_review') && (r.status === 'unverified' || r.status === 'corroborated')).length ?? 0;
+  const badges: Record<string, number> = { '/approvals': openApprovals, '/reports': session.role === 'officer' || session.role === 'second_approver' ? queue : 0 };
 
   return (
-    <aside className="w-16 md:w-60 shrink-0 bg-white border-r border-[#E7E3DA] flex flex-col justify-between h-screen sticky top-0 z-40 select-none">
-      
-      {/* Top: Logo & RESILION 2.0 */}
-      <div>
-        <div className="h-14 px-4 flex items-center gap-2.5 border-b border-[#E7E3DA]">
-          <div className="w-7 h-7 rounded-md bg-[#3780C8] flex items-center justify-center shrink-0">
-            <Shield className="w-4 h-4 text-white" />
-          </div>
-          <span className="hidden md:inline font-semibold text-base tracking-tight text-[#1F2933]">
-            RESILION 2.0
-          </span>
+    <aside className="w-16 md:w-60 shrink-0 bg-white border-r border-[#E7E3DA] flex flex-col h-screen sticky top-0 z-40">
+      <div className="h-14 px-4 flex items-center gap-2.5 border-b border-[#E7E3DA]">
+        <div className="w-7 h-7 rounded-md bg-[#3780C8] flex items-center justify-center shrink-0">
+          <Shield className="w-4 h-4 text-white" />
         </div>
-
-        {/* Five Navigation Items */}
-        <nav className="p-2 space-y-1" aria-label="Main navigation">
-          {navItems.map(item => {
-            const Icon = item.icon;
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                end={item.path === '/'}
-                className={({ isActive }) =>
-                  `flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-[#3780C8]/10 text-[#3780C8] font-semibold'
-                      : 'text-[#1F2933] hover:text-[#1F2933] hover:bg-[#FAF8F3]'
-                  }`
-                }
-              >
-                <div className="flex items-center gap-3">
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span className="hidden md:inline">{item.name}</span>
-                </div>
-                {item.badge !== undefined && (
-                  <span className="hidden md:flex w-4 h-4 rounded-full bg-[#3780C8] text-white text-[10px] font-bold items-center justify-center">
-                    {item.badge}
-                  </span>
-                )}
-              </NavLink>
-            );
-          })}
-        </nav>
+        <div className="hidden md:block leading-tight">
+          <div className="font-semibold text-[15px] tracking-tight text-[#1F2933]">RESILION 2.0</div>
+          <div className="text-[11px] text-[#6B7280]">NH-27 · Dima Hasao</div>
+        </div>
       </div>
 
-      {/* Bottom of Sidebar */}
-      <div className="p-3 border-t border-[#E7E3DA] space-y-2">
-        
-        {/* User Chip with Role Switcher Menu */}
-        <div className="relative">
-          <button
-            onClick={() => setRoleMenuOpen(prev => !prev)}
-            className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-[#FAF8F3] text-left text-xs text-[#1F2933] transition-colors"
-            title="Switch user role"
-          >
-            <div className="flex items-center gap-2 truncate">
-              <span className="w-2 h-2 rounded-full bg-[#3780C8] shrink-0"></span>
-              <span className="hidden md:inline font-medium text-xs truncate">
-                Control Room · {ROLE_DISPLAY[currentRole]}
+      <nav className="p-2 space-y-0.5 flex-1" aria-label="Main navigation">
+        {NAV.filter(n => n.allowed(session.role)).map(item => {
+          const Icon = item.icon;
+          const badge = badges[item.path] ?? 0;
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              title={item.label}
+              className={({ isActive }) =>
+                cx(
+                  'flex items-center justify-between px-3 h-9 rounded-md text-[13px] font-medium transition-colors',
+                  isActive ? 'bg-[#3780C8]/10 text-[#3780C8]' : 'text-[#1F2933] hover:bg-[#FAF8F3]'
+                )
+              }
+            >
+              <span className="flex items-center gap-3">
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="hidden md:inline">{item.label}</span>
               </span>
-            </div>
-            <ChevronUp className="w-3.5 h-3.5 text-[#6B7280] hidden md:block shrink-0" />
-          </button>
+              {badge > 0 && (
+                <span className="hidden md:flex min-w-5 h-5 px-1 rounded-full bg-[#3780C8] text-white text-[11px] font-semibold items-center justify-center">
+                  {badge}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
+      </nav>
 
-          {roleMenuOpen && (
-            <>
-              <div 
-                className="fixed inset-0 z-40" 
-                onClick={() => setRoleMenuOpen(false)} 
-              />
-              <div className="absolute left-0 bottom-full mb-1 w-52 bg-white border border-[#E7E3DA] rounded-lg shadow-lg p-1 z-50 text-xs">
-                {(['control_officer', 'second_approver', 'road_engineer', 'patrol', 'admin'] as DemoRole[]).map(r => (
-                  <button
-                    key={r}
-                    onClick={() => {
-                      setRole(r);
-                      setRoleMenuOpen(false);
-                    }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-md flex items-center justify-between ${
-                      currentRole === r ? 'bg-[#3780C8]/10 text-[#3780C8] font-semibold' : 'text-[#1F2933] hover:bg-[#FAF8F3]'
-                    }`}
-                  >
-                    <span>{ROLE_DISPLAY[r]}</span>
-                    {currentRole === r && <span className="w-1.5 h-1.5 rounded-full bg-[#3780C8]"></span>}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+      <div className="p-3 border-t border-[#E7E3DA] space-y-2">
+        <div className="hidden md:block px-1">
+          <div className="text-[13px] font-medium text-[#1F2933] truncate">{session.name}</div>
+          <div className="text-[11px] text-[#6B7280]">{ROLE_LABEL[session.role]}</div>
         </div>
-
-        {/* Settings button */}
         <button
-          onClick={() => setIsSettingsOpen(true)}
-          className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-medium text-[#6B7280] hover:text-[#1F2933] hover:bg-[#FAF8F3] transition-colors"
-          title="Open settings"
+          onClick={logout}
+          title="Sign out"
+          className="w-full flex items-center gap-2.5 px-2 h-8 rounded-md text-[13px] text-[#6B7280] hover:text-[#1F2933] hover:bg-[#FAF8F3]"
         >
-          <Settings className="w-4 h-4 shrink-0" />
-          <span className="hidden md:inline">Settings</span>
+          <LogOut className="w-4 h-4 shrink-0" />
+          <span className="hidden md:inline">Sign out</span>
         </button>
-
-        {/* Small grey tag */}
-        <div className="hidden md:block pt-1">
-          <div className="text-[11px] text-[#6B7280] px-2 py-1 rounded bg-[#FAF8F3] border border-[#E7E3DA] truncate">
-            NH-27 · Dima Hasao · Sample data
-          </div>
-        </div>
-
+        {apiMode === 'mock' && (
+          <div className="hidden md:block text-[11px] text-[#6B7280] px-2 py-1 rounded bg-[#FAF8F3] border border-[#E7E3DA]">Sample data</div>
+        )}
       </div>
-
     </aside>
   );
 };

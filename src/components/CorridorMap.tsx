@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Segment, SafeHoldingPoint } from '../types';
+import { Segment, SafeHoldingPoint, ApproachZone } from '../types';
 import L from 'leaflet';
 import { Map, Layers, Navigation, AlertTriangle } from 'lucide-react';
 
 interface CorridorMapProps {
   segments: Record<string, Segment>;
   holdingPoints: Record<string, SafeHoldingPoint>;
+  zones?: ApproachZone[];
   selectedSegmentId?: string | null;
   onSelectSegment?: (segmentId: string) => void;
   heightClass?: string;
@@ -22,6 +23,7 @@ const MAP_LINE_COLORS: Record<string, string> = {
 export const CorridorMap: React.FC<CorridorMapProps> = ({
   segments,
   holdingPoints,
+  zones = [],
   selectedSegmentId,
   onSelectSegment,
   heightClass = 'h-[540px]'
@@ -95,7 +97,7 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
 
         polyline.bindTooltip(
           `<div style="font-family: Inter, sans-serif; font-size: 12px; line-height: 1.3;">
-            <strong style="color: #1F2933;">${seg.name}</strong><br/>
+            <strong style="color: #1F2933;">${seg.id} ${seg.name}</strong><br/>
             <span>${seg.roadState} · ${seg.riskLevel}</span>
           </div>`,
           { sticky: true, className: 'resilion-map-tooltip' }
@@ -150,7 +152,7 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
             white-space: nowrap;
             transform: translate(-50%, -100%);
           ">
-            ${hp.name.split(' ')[0]} Holding
+            ${hp.shortName}
           </div>`
         });
 
@@ -164,8 +166,26 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
         );
         hpMarker.addTo(group);
       });
+
+      // Approach-zone geofences (FR-08)
+      zones.forEach(z => {
+        const circle = L.circle(z.center, {
+          radius: z.extentKm * 1000,
+          color: '#3780C8',
+          weight: 1,
+          opacity: 0.8,
+          fillColor: '#3780C8',
+          fillOpacity: 0.06,
+          dashArray: '4, 4'
+        });
+        circle.bindTooltip(
+          `<div style="font-family: Inter, sans-serif; font-size: 12px;"><strong>${z.id}</strong> · ${z.direction}<br/>${z.extentKm} km before ${z.segmentId}</div>`,
+          { sticky: true, className: 'resilion-map-tooltip' }
+        );
+        circle.addTo(group);
+      });
     }
-  }, [viewMode, segments, holdingPoints, selectedSegmentId]);
+  }, [viewMode, segments, holdingPoints, zones, selectedSegmentId]);
 
   return (
     <div className={`relative rounded-lg border border-[#E7E3DA] overflow-hidden bg-white ${heightClass}`}>
@@ -248,13 +268,13 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
                       key={seg.id}
                       onClick={() => handleSegmentClick(seg.id)}
                       className="relative z-10 flex flex-col items-center group cursor-pointer"
-                      title={`${seg.name} (${seg.roadState}, ${seg.riskLevel})`}
+                      title={`${seg.id} ${seg.name} (${seg.roadState}, ${seg.riskLevel})`}
                     >
-                      {seg.id === 'S-05' && (
-                        <div className="absolute -top-6 text-[10px] font-medium bg-[#3780C8] text-white px-1.5 py-0.5 rounded shadow-xs whitespace-nowrap">
-                          Haflong
+                      {Object.values(holdingPoints).filter(h => h.segmentId === seg.id).map(h => (
+                        <div key={h.id} className="absolute -top-6 text-[10px] font-medium bg-[#3780C8] text-white px-1.5 py-0.5 rounded shadow-xs whitespace-nowrap">
+                          {h.shortName}
                         </div>
-                      )}
+                      ))}
 
                       <div
                         className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold border-2 transition-transform group-hover:scale-110 ${
@@ -325,6 +345,14 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
         <div className="flex items-center gap-1">
           <span className="w-2 h-2 rounded-full bg-[#D45555]"></span>
           <span>Red</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-[#9CA3AF]"></span>
+          <span>No data</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="w-3 h-3 rounded-full border border-dashed border-[#3780C8]"></span>
+          <span>Approach zone</span>
         </div>
       </div>
 

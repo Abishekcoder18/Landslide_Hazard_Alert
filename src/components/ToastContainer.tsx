@@ -1,14 +1,14 @@
 import React from 'react';
-import { useDemo } from '../context/DemoContext';
+import { useApp } from '../state/AppContext';
 import { CheckCircle2, AlertTriangle, AlertOctagon, Info, X } from 'lucide-react';
 
 export const ToastContainer: React.FC = () => {
-  const { toasts, dismissToast } = useDemo();
+  const { toasts, dismissToast } = useApp();
 
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-16 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+    <div className="fixed bottom-12 right-4 z-[1100] flex flex-col-reverse gap-2 max-w-sm w-full pointer-events-none">
       {toasts.map(toast => {
         let bgClass = 'bg-white border-[#E7E3DA] text-[#1F2933]';
         let icon = <Info className="w-4 h-4 text-[#3780C8] shrink-0" />;

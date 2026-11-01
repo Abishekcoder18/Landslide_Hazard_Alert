@@ -1,72 +1,85 @@
+/**
+ * RESILION 2.0 domain types — PRD v1.0 §11.1 data entities.
+ * These are the shapes exchanged with the backend (see docs/API_CONTRACT.md).
+ * All timestamps are ISO 8601 strings.
+ */
+
 export type RiskLevel = 'GREEN' | 'YELLOW' | 'ORANGE' | 'RED' | 'NO_DATA';
 
 export type RoadState = 'OPEN' | 'RESTRICTED_HEAVY' | 'RESTRICTED_ONE_WAY' | 'BLOCKED' | 'UNKNOWN';
 
-export type DecisionType = 'GO' | 'GO_CAUTION' | 'HOLD' | 'DIVERT' | 'CLOSE';
+/** Traveller decision (FR-09). CLOSE is a control-room action, carried separately. */
+export type DecisionType = 'GO' | 'GO_CAUTION' | 'HOLD' | 'DIVERT';
 
-export type DemoRole = 
-  | 'control_officer'
-  | 'second_approver'
-  | 'road_engineer'
-  | 'patrol'
-  | 'traveller'
-  | 'admin';
+/** PRD §8 roles. */
+export type Role = 'officer' | 'second_approver' | 'road_engineer' | 'patrol' | 'public_reporter' | 'admin';
 
+export type Direction = 'Northbound' | 'Southbound';
+
+export type Susceptibility = 'Very Low' | 'Low' | 'Moderate' | 'High' | 'Very High';
+
+export type ImdWarning = 'NONE' | 'YELLOW' | 'ORANGE' | 'RED';
+
+/** FR-02 inputs. `null` = missing (BR-06). */
 export interface SegmentInputs {
-  susceptibility: 'Very Low' | 'Low' | 'Moderate' | 'High' | 'Very High';
-  slope: string;
-  rainfall24h: number; // mm
-  rainfall3d: number; // mm
-  rainfall7d: number; // mm
-  pastIncidents: number;
-  warnings: string;
-  freshness: string;
+  susceptibility: Susceptibility | null;
+  slopeDeg: number | null;
+  rainfall24h: number | null;
+  rainfall3d: number | null;
+  rainfall7d: number | null;
+  pastIncidents: number | null;
+  imdWarning: ImdWarning;
+  gsiBulletin: boolean;
+  updatedAt: string;
+  /** Inputs are scenario values until real feeds are wired. */
+  sample: boolean;
 }
 
 export interface Segment {
-  id: string; // e.g., 'S-07'
-  name: string; // e.g., 'S-07 Jatinga–Harangajao'
-  kmRange: string; // 'km 166–178'
+  id: string;
+  name: string;
   startKm: number;
   endKm: number;
-  coordinates: [number, number][]; // corridor line geometry
+  coordinates: [number, number][];
   center: [number, number];
   roadState: RoadState;
   riskLevel: RiskLevel;
+  riskIndex: number | null;
   reasons: string[];
-  freshness: string;
-  validUntil: string; // countdown or ISO timestamp
+  computedAt: string;
+  validUntil: string;
   inputs: SegmentInputs;
-  windowClosing?: boolean;
-  lengthKm: number;
-  elevationM: number;
+}
+
+export interface DiversionRoute {
+  name: string;
+  segmentIds: string[];
 }
 
 export interface ApproachZone {
-  id: string; // 'AZ-07N'
-  name: string; // 'AZ-07N from Haflong side'
-  direction: 'Northbound' | 'Southbound';
-  segmentId: string; // target segment 'S-07'
-  targetSegmentName: string;
+  id: string;
+  name: string;
+  direction: Direction;
+  segmentId: string;
+  /** Point where the zone starts (geofence centre) and its extent. */
+  center: [number, number];
+  extentKm: number;
+  locationKm: number;
   nearestHoldingPointId: string;
-  fallbackHoldingPointIds?: string[]; // BR-04: next points back, in order
-  locationKm: string;
-  diversionRoutes?: {
-    name: string;
-    description: string;
-    segmentIds: string[];
-  }[];
+  /** BR-04: next points back, in order. */
+  fallbackHoldingPointIds?: string[];
+  diversionRoutes?: DiversionRoute[];
 }
 
 export interface SafeHoldingPoint {
-  id: string; // 'HP-HAFLONG'
-  name: string; // 'Haflong Safe Holding Area'
-  locationName: string; // 'Haflong Junction Staging Area'
-  facilities: string[]; // ['Food stalls', 'Fuel', 'Emergency shelter', 'Heavy vehicle staging', 'Medical aid']
-  segmentId: string; // segment where it sits
+  id: string;
+  name: string;
+  shortName: string;
+  locationName: string;
+  facilities: string[];
+  segmentId: string;
   capacityVehicles: number;
-  currentOccupancy: number;
-  statusNote: string;
+  provisional: boolean;
 }
 
 export interface DecisionResult {
@@ -75,114 +88,233 @@ export interface DecisionResult {
   ruleExplanation: string;
   actionText: string;
   holdingPoint?: SafeHoldingPoint;
-  holdingEligibility: {
-    isEligible: boolean;
-    reason: string;
-  };
-  diversionCheck: {
-    isOffered: boolean;
-    routeCandidateName?: string;
-    details: string;
-  };
+  holdingEligibility: { isEligible: boolean; reason: string };
+  diversionCheck: { isOffered: boolean; routeCandidateName?: string; details: string };
   expectedWaitMinutes?: number;
   windowClosing: boolean;
-  closeRecommended: boolean; // BR-01: BLOCKED or Red
+  closeRecommended: boolean;
   travellerAdvisory: string;
 }
 
-export interface FieldReport {
-  id: string;
-  timestamp: string;
-  submitterRole: string;
-  locationText: string;
+/** Current decision per approach zone (FR-09, FR-18). */
+export interface ZoneDecision {
+  zoneId: string;
   segmentId: string;
-  photoUrl: string;
-  notes: string;
-  aiClassification: {
-    hazardClass: string;
-    blockagePercent: number;
-    confidence: number;
-    suggestion: string;
-  };
-  checks: {
-    insideCorridor: boolean;
-    recent: boolean;
-    duplicateGroup?: string;
-  };
-  status: 'unverified' | 'corroborated' | 'confirmed' | 'rejected';
-  confirmedBy?: string;
-  confirmedAt?: string;
+  /** Decision for light vehicles / all traffic. */
+  result: DecisionResult;
+  /** Present only when heavy vehicles get a different decision (RESTRICTED heavy-only). */
+  heavyResult?: DecisionResult;
+  officerClearedPassage?: { by: string; at: string };
+  at: string;
 }
 
-export interface IncidentCrew {
+/** FR-18 / §11.1 Decision record (append-only). */
+export interface DecisionRecord {
+  id: string;
+  at: string;
+  zoneId: string;
+  segmentId: string;
+  decision: DecisionType;
+  heavyDecision?: DecisionType;
+  ruleId: string;
+  inputs: { roadState: RoadState; riskLevel: RiskLevel; riskIndex: number | null; imdWarning: ImdWarning };
+  holdingPointId?: string;
+  diversion?: string;
+  expectedWaitMinutes?: number;
+  windowClosing: boolean;
+  closeRecommended: boolean;
+  trigger: string;
+  /** SM3: upload → decision ready, excluding officer think time. */
+  reportToDecisionMs?: number;
+  reportId?: string;
+}
+
+export type HazardClass = 'debris' | 'crack' | 'fallen_tree' | 'water' | 'clear' | 'not_relevant';
+
+export interface AiClassification {
+  hazardClass: HazardClass;
+  blockedShare: number; // 0–100
+  confidence: number; // 0–1
+  model: string;
+  simulated: boolean;
+}
+
+export type ReportRoute = 'officer_queue' | 'manual_review' | 'flagged' | 'log_only';
+
+export type ReportStatus = 'unverified' | 'corroborated' | 'confirmed' | 'rejected';
+
+export interface ReportChecks {
+  insideCorridor: boolean;
+  distanceToCorridorKm: number | null;
+  recent: boolean;
+  ageMinutes: number;
+  duplicateOf?: string;
+  groupId: string;
+  reporterReportCount: number;
+}
+
+export interface Report {
+  id: string;
+  createdAt: string;
+  capturedAt: string;
+  queuedAt?: string;
+  channel: 'web' | 'field_app';
+  reporterName: string;
+  reporterRole: Role;
+  segmentId: string;
+  lat: number | null;
+  lon: number | null;
+  locationText: string;
+  photoUrl: string;
+  note: string;
+  ai: AiClassification | null;
+  aiError?: string;
+  checks: ReportChecks;
+  route: ReportRoute;
+  status: ReportStatus;
+  incidentId?: string;
+  decidedBy?: string;
+  decidedAt?: string;
+}
+
+export type ClosureType = 'FULL' | 'HEAVY_ONLY' | 'ONE_WAY';
+
+export type IncidentState =
+  | 'reported'
+  | 'verified'
+  | 'closed'
+  | 'clearance_in_progress'
+  | 'reopened_one_way'
+  | 'reopened_full';
+
+export interface CrewAssignment {
   unitName: string;
   leader: string;
   contact: string;
-  equipment: string[];
   dispatchedAt: string;
 }
 
 export interface Incident {
   id: string;
   segmentId: string;
-  title: string;
-  status: 'reported' | 'verified' | 'closed' | 'clearance_in_progress' | 'reopened_oneway' | 'reopened_full';
-  reportedAt: string;
-  verifiedAt?: string;
-  closedAt?: string;
-  reopeningEstimate: string; // e.g. "4:00 PM"
-  actualReopenedAt?: string;
-  crewAssigned?: IncidentCrew;
-  equipmentList: string[];
-  notes: string[];
+  state: IncidentState;
+  closureType?: ClosureType;
+  openedAt: string;
+  reportIds: string[];
+  crew?: CrewAssignment;
+  reopeningEstimate?: string;
+  equipment: string[];
+  log: { at: string; by: string; text: string }[];
 }
 
-export interface ClosureApproval {
+export type ApprovalKind = 'closure' | 'reopening' | 'alert';
+export type ApprovalStatus = 'pending' | 'escalated' | 'approved' | 'rejected';
+
+export interface Approval {
   id: string;
+  kind: ApprovalKind;
   segmentId: string;
-  recommendedDecision: 'CLOSE';
-  closureType: 'FULL' | 'HEAVY_ONLY' | 'ONE_WAY';
-  status: 'pending' | 'approved' | 'rejected';
-  escalationTimeRemainingSec: number;
+  incidentId?: string;
+  alertId?: string;
+  /** closure: recommended/selected closure type. reopening: target. */
+  closureType?: ClosureType;
+  reopenTo?: 'one_way' | 'full';
+  reason: string;
+  status: ApprovalStatus;
+  createdAt: string;
+  escalateAt: string;
+  escalatedAt?: string;
+  decidedBy?: string;
+  decidedAt?: string;
+}
+
+export type AlertTemplate = 'HOLD' | 'DIVERT' | 'CLOSE' | 'CAUTION' | 'REOPEN';
+export type AlertLanguage = 'en' | 'hi' | 'as' | 'bn' | 'dis';
+
+export interface AlertValidation {
+  ok: boolean;
+  errors: string[];
+}
+
+export interface AlertText {
+  lang: AlertLanguage;
+  text: string;
+  source: 'llm' | 'template' | 'officer_edit' | 'pending_translation';
+  validation: AlertValidation;
+  /** BR-09: when validation fails the officer receives the plain template. */
+  blocked: boolean;
+}
+
+export interface AlertFields {
+  segmentId: string;
+  place: string;
+  template: AlertTemplate;
+  zones: { zoneId: string; direction: Direction; decision: DecisionType; place?: string }[];
+  noSafeDiversion: boolean;
+  reopeningEstimate?: string; // clock text, e.g. "4:00 PM"
+  certainty: 'Observed' | 'Likely';
+}
+
+export interface Alert {
+  id: string;
+  createdAt: string;
+  segmentId: string;
+  zoneIds: string[];
+  fields: AlertFields;
+  texts: AlertText[];
+  status: 'draft' | 'approved' | 'rejected';
   approvedBy?: string;
   approvedAt?: string;
-  drafts: {
-    en: string;
-    hi: string;
-    as: string;
-    bn: string;
-    dimasa: string;
-  };
-  validation: {
-    placesMatch: boolean;
-    timesMatch: boolean;
-    decisionMatch: boolean;
-    blockedExample?: {
-      language: string;
-      error: string;
-      snippet: string;
-    };
-  };
-  capXml: string;
+  capXml?: string;
 }
 
-export interface AuditLogEntry {
+export interface AuditEntry {
   id: string;
-  timestamp: string;
-  actorRole: string;
+  at: string;
+  actor: string;
+  role: Role | 'system';
   action: string;
-  segmentId?: string;
-  ruleUsed?: string;
-  beforeState?: string;
-  afterState?: string;
+  entity?: string;
+  before?: string;
+  after?: string;
   details: string;
-  verified: boolean;
 }
 
-export interface StoryStepInfo {
-  step: number;
-  title: string;
-  shortDesc: string;
-  route: string;
-  roleHint: DemoRole;
+/** NFR-09: configuration, not code. */
+export interface Config {
+  weights: { susceptibility: number; rainfall: number; slope: number; history: number };
+  thresholds: { yellow: number; orange: number; red: number };
+  validityHours: number;
+  staleInputHours: number;
+  approachZoneExtentKm: number;
+  duplicateWindowMinutes: number;
+  duplicateDistanceKm: number;
+  reportMaxAgeMinutes: number;
+  corridorBufferKm: number;
+  aiConfidenceThreshold: number;
+  escalationMinutes: number;
+  retentionDays: number;
+  aiServiceOnline: boolean;
+}
+
+export interface Session {
+  userId: string;
+  name: string;
+  role: Role;
+  token: string;
+}
+
+export interface Snapshot {
+  serverTime: string;
+  segments: Segment[];
+  zones: ApproachZone[];
+  holdingPoints: SafeHoldingPoint[];
+  decisions: ZoneDecision[];
+  decisionRecords: DecisionRecord[];
+  reports: Report[];
+  incidents: Incident[];
+  approvals: Approval[];
+  alerts: Alert[];
+  audit: AuditEntry[];
+  config: Config;
 }

@@ -1,246 +1,295 @@
-import React, { useState, useEffect } from 'react';
-import { useDemo } from '../context/DemoContext';
+import React, { useEffect, useState } from 'react';
+import { Check, X, Download, Lock, Megaphone, DoorOpen, OctagonX } from 'lucide-react';
 import { TopBar } from '../components/TopBar';
-import { DecisionChip } from '../components/Badges';
-import { Check, X, Clock, Download, Code2, CheckCircle2 } from 'lucide-react';
+import { ApprovalBadge, DecisionChip, Pill, RiskBadge, RoadStateBadge } from '../components/Badges';
+import { Button, Card, CardHeader, Empty, PageBody, cx } from '../components/ui';
+import { useApp } from '../state/AppContext';
+import { useCorridor } from '../state/selectors';
+import { api } from '../api';
+import { canDecideApproval } from '../domain/permissions';
+import { ALERT_LANGUAGES } from '../domain/alerts';
+import { Alert, AlertLanguage, Approval, ClosureType } from '../types';
+import { fmtCountdown, fmtDateTime, fmtTime } from '../lib/format';
+
+const KIND: Record<Approval['kind'], { label: string; icon: React.ReactNode }> = {
+  closure: { label: 'Closure', icon: <OctagonX className="w-4 h-4" /> },
+  reopening: { label: 'Reopening', icon: <DoorOpen className="w-4 h-4" /> },
+  alert: { label: 'Alert', icon: <Megaphone className="w-4 h-4" /> }
+};
+
+const CLOSURE: { id: ClosureType; label: string }[] = [
+  { id: 'FULL', label: 'Full' },
+  { id: 'HEAVY_ONLY', label: 'Heavy vehicles' },
+  { id: 'ONE_WAY', label: 'One-way' }
+];
+
+const Decide: React.FC<{ a: Approval; closureType?: ClosureType }> = ({ a, closureType }) => {
+  const { session, act, now } = useApp();
+  const allowed = session ? canDecideApproval(session.role, a.status) : false;
+  if (a.status === 'approved' || a.status === 'rejected') {
+    return (
+      <div className="text-[13px] text-[#6B7280]">
+        {a.decidedBy} · {fmtDateTime(a.decidedAt)}
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="text-xs text-[#6B7280]">
+        {a.status === 'pending' ? (
+          <span className="font-mono">Escalates in {fmtCountdown(a.escalateAt, now)}</span>
+        ) : (
+          <span className="text-[#9B2C2C] font-medium">Escalated · second approver · {fmtTime(a.escalatedAt)}</span>
+        )}
+      </div>
+      {allowed ? (
+        <div className="flex gap-2">
+          <Button variant="danger" icon={<X className="w-4 h-4" />} onClick={() => act(s => api.decideApproval(s, a.id, false), `${a.id} rejected`)}>
+            Reject
+          </Button>
+          <Button variant="primary" icon={<Check className="w-4 h-4" />} onClick={() => act(s => api.decideApproval(s, a.id, true, closureType), `${a.id} approved`)}>
+            Approve
+          </Button>
+        </div>
+      ) : (
+        <span className="inline-flex items-center gap-1.5 text-xs text-[#6B7280]">
+          <Lock className="w-3.5 h-3.5" /> {session?.role === 'second_approver' ? 'Available on escalation' : 'Officer only'}
+        </span>
+      )}
+    </div>
+  );
+};
+
+const ClosureDetail: React.FC<{ a: Approval }> = ({ a }) => {
+  const { snap, segments, decisionByZone } = useCorridor();
+  const [type, setType] = useState<ClosureType>(a.closureType ?? 'FULL');
+  useEffect(() => setType(a.closureType ?? 'FULL'), [a.id, a.closureType]);
+  const seg = segments[a.segmentId];
+  const zones = snap.zones.filter(z => z.segmentId === a.segmentId);
+  const open = a.status === 'pending' || a.status === 'escalated';
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-center gap-2 flex-wrap text-[13px]">
+        <DecisionChip decision="CLOSE" />
+        <span className="font-medium">{seg.id} {seg.name}</span>
+        <RiskBadge level={seg.riskLevel} />
+        <RoadStateBadge state={seg.roadState} />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {zones.map(z => {
+          const r = decisionByZone[z.id].result;
+          return (
+            <div key={z.id} className="rounded-md border border-[#E7E3DA] px-3 py-2 text-[13px] flex items-center justify-between">
+              <span>
+                <span className="font-mono mr-1.5">{z.id}</span>
+                <span className="text-[#6B7280]">{r.decision === 'HOLD' ? r.holdingPoint?.shortName ?? '—' : r.diversionCheck.routeCandidateName ?? ''}</span>
+              </span>
+              <DecisionChip decision={r.decision} />
+            </div>
+          );
+        })}
+      </div>
+      <div>
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-1.5">Closure type</div>
+        <div className="grid grid-cols-3 gap-2">
+          {CLOSURE.map(c => (
+            <button
+              key={c.id}
+              disabled={!open}
+              onClick={() => setType(c.id)}
+              className={cx('h-9 rounded-md border text-[13px] font-medium disabled:opacity-60', type === c.id ? 'border-[#3780C8] bg-[#3780C8]/10 text-[#3780C8]' : 'border-[#E7E3DA] hover:bg-[#FAF8F3]')}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <Decide a={a} closureType={type} />
+    </div>
+  );
+};
+
+const ReopeningDetail: React.FC<{ a: Approval }> = ({ a }) => {
+  const { segments } = useCorridor();
+  const seg = segments[a.segmentId];
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-center gap-2 flex-wrap text-[13px]">
+        <span className="font-medium">{seg.id} {seg.name}</span>
+        <RoadStateBadge state={seg.roadState} />
+        <span className="text-[#6B7280]">→</span>
+        <RoadStateBadge state={a.reopenTo === 'full' ? 'OPEN' : 'RESTRICTED_ONE_WAY'} />
+      </div>
+      <div className="text-[13px] text-[#6B7280] font-mono">{a.incidentId}</div>
+      <Decide a={a} />
+    </div>
+  );
+};
+
+const AlertDetail: React.FC<{ a: Approval; alert: Alert }> = ({ a, alert }) => {
+  const { can, act } = useApp();
+  const [lang, setLang] = useState<AlertLanguage>('en');
+  const [draft, setDraft] = useState('');
+  const [showCap, setShowCap] = useState(false);
+  const text = alert.texts.find(t => t.lang === lang)!;
+  // Reset to the stored text after every save (a blocked edit is replaced by the template, BR-09).
+  useEffect(() => setDraft(text.text), [text.text, text.source, text.validation.errors.join('|'), lang, alert.id]);
+  const editable = alert.status === 'draft' && can('approve_alert') && lang !== 'dis';
+  // A blocked text is replaced by the plain template, which is what is sent (BR-09).
+  const llmTexts = alert.texts.filter(t => t.lang !== 'dis');
+  const blockedCount = llmTexts.filter(t => t.blocked).length;
+  const okCount = llmTexts.filter(t => t.blocked || t.validation.ok).length;
+
+  const download = () => {
+    if (!alert.capXml) return;
+    const url = URL.createObjectURL(new Blob([alert.capXml], { type: 'application/xml' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `CAP-${alert.id}.xml`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-center gap-2 flex-wrap text-[13px]">
+        <Pill tone="blue">{alert.fields.template}</Pill>
+        <span className="font-medium">{alert.segmentId} {alert.fields.place}</span>
+        {alert.fields.zones.map(z => (
+          <span key={z.zoneId} className="inline-flex items-center gap-1 text-xs text-[#6B7280]">
+            {z.zoneId} <DecisionChip decision={z.decision} />
+          </span>
+        ))}
+        <Pill tone={okCount === 4 ? 'green' : 'red'}>Validated {okCount}/4</Pill>
+        {blockedCount > 0 && <Pill tone="red">Blocked {blockedCount}</Pill>}
+      </div>
+
+      <div className="flex gap-1 border-b border-[#E7E3DA]">
+        {ALERT_LANGUAGES.map(l => {
+          const t = alert.texts.find(x => x.lang === l.code)!;
+          const bad = l.code !== 'dis' && (t.blocked || !t.validation.ok);
+          return (
+            <button
+              key={l.code}
+              onClick={() => setLang(l.code)}
+              className={cx('-mb-px h-9 px-3 text-[13px] font-medium border-b-2 inline-flex items-center gap-1.5', lang === l.code ? 'border-[#3780C8] text-[#3780C8]' : 'border-transparent text-[#6B7280]')}
+            >
+              {l.label}
+              <span className={cx('w-1.5 h-1.5 rounded-full', l.code === 'dis' ? 'bg-[#9CA3AF]' : bad ? 'bg-[#D45555]' : 'bg-[#4CAF7A]')} />
+            </button>
+          );
+        })}
+      </div>
+
+      {lang === 'dis' ? (
+        <Pill tone="yellow">Native-speaker template pending</Pill>
+      ) : (
+        <div className="space-y-2">
+          <textarea
+            aria-label={`Alert text ${lang}`}
+            className="w-full min-h-28 p-3 rounded-md border border-[#E7E3DA] text-[13px] leading-relaxed focus:outline-none focus:border-[#3780C8] disabled:bg-[#FAF8F3]"
+            value={draft}
+            disabled={!editable}
+            onChange={e => setDraft(e.target.value)}
+          />
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Pill tone="grey">{text.source === 'llm' ? 'Language model' : text.source === 'officer_edit' ? 'Officer edit' : 'Template'}</Pill>
+              {text.blocked ? (
+                <Pill tone="red">Blocked · template used</Pill>
+              ) : text.validation.ok ? (
+                <Pill tone="green">Places ✓ Times ✓ Decision ✓</Pill>
+              ) : (
+                <Pill tone="red">Mismatch</Pill>
+              )}
+            </div>
+            {editable && draft !== text.text && (
+              <Button size="sm" variant="primary" onClick={() => act(s => api.editAlertText(s, alert.id, lang, draft))}>
+                Validate & save
+              </Button>
+            )}
+          </div>
+          {text.validation.errors.length > 0 && (
+            <ul className="text-xs text-[#9B2C2C] space-y-0.5">
+              {text.validation.errors.map(e => (
+                <li key={e}>· {e}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#E7E3DA]">
+        <span className="text-xs text-[#6B7280]">CAP 1.2 · {alert.zoneIds.join(', ')}</span>
+        {alert.capXml ? (
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => setShowCap(v => !v)}>{showCap ? 'Hide CAP' : 'View CAP'}</Button>
+            <Button size="sm" icon={<Download className="w-3.5 h-3.5" />} onClick={download}>CAP XML</Button>
+          </div>
+        ) : (
+          <span className="text-xs text-[#6B7280]">After approval</span>
+        )}
+      </div>
+      {showCap && alert.capXml && <pre className="text-[11px] font-mono bg-[#FAF8F3] border border-[#E7E3DA] rounded-md p-3 overflow-auto max-h-72">{alert.capXml}</pre>}
+
+      <Decide a={a} />
+    </div>
+  );
+};
 
 export const ApprovalsPage: React.FC = () => {
-  const { approval, approveClosure, rejectClosure } = useDemo();
+  const { snap } = useCorridor();
+  const { now } = useApp();
+  const open = snap.approvals.filter(a => a.status === 'pending' || a.status === 'escalated');
+  const closed = snap.approvals.filter(a => a.status === 'approved' || a.status === 'rejected');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = snap.approvals.find(a => a.id === selectedId) ?? open[0] ?? closed[0];
 
-  const [closureType, setClosureType] = useState<'FULL' | 'HEAVY_ONLY' | 'ONE_WAY'>(approval.closureType || 'FULL');
-  const [activeLang, setActiveLang] = useState<'en' | 'hi' | 'as' | 'bn' | 'dimasa'>('en');
-  const [showCapModal, setShowCapModal] = useState<boolean>(false);
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(approval.escalationTimeRemainingSec || 580);
-
-  useEffect(() => {
-    if (approval.status !== 'pending') return;
-    const interval = setInterval(() => {
-      setSecondsRemaining(prev => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [approval.status]);
-
-  const formatTimer = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const handleDownloadCap = () => {
-    const element = document.createElement('a');
-    const file = new Blob([approval.capXml], { type: 'application/xml' });
-    element.href = URL.createObjectURL(file);
-    element.download = `CAP-ALERT-NH27-S07.xml`;
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-  };
-
-  const langLabels = {
-    en: 'English',
-    hi: 'Hindi',
-    as: 'Assamese',
-    bn: 'Bengali',
-    dimasa: 'Dimasa'
-  };
+  const Item: React.FC<{ a: Approval }> = ({ a }) => (
+    <button
+      onClick={() => setSelectedId(a.id)}
+      className={cx('w-full text-left px-4 py-2.5 flex items-start gap-3', selected?.id === a.id ? 'bg-[#3780C8]/10' : 'hover:bg-[#FAF8F3]')}
+    >
+      <span className="text-[#6B7280] mt-0.5">{KIND[a.kind].icon}</span>
+      <span className="flex-1 min-w-0">
+        <span className="flex items-center justify-between gap-2">
+          <span className="text-[13px] font-medium">{KIND[a.kind].label} · {a.segmentId}</span>
+          <ApprovalBadge status={a.status} />
+        </span>
+        <span className="flex items-center justify-between gap-2 text-xs text-[#6B7280] mt-0.5">
+          <span className="truncate">{a.reason}</span>
+          <span className="font-mono shrink-0">{a.status === 'pending' ? fmtCountdown(a.escalateAt, now) : fmtTime(a.decidedAt ?? a.escalatedAt ?? a.createdAt)}</span>
+        </span>
+      </span>
+    </button>
+  );
 
   return (
     <div className="flex flex-col min-h-screen">
       <TopBar title="Approvals" />
+      <PageBody>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          <Card className="lg:col-span-4 overflow-hidden">
+            <CardHeader title={`Open · ${open.length}`} />
+            <div className="divide-y divide-[#E7E3DA]">{open.length ? open.map(a => <Item key={a.id} a={a} />) : <Empty>No open approvals</Empty>}</div>
+            <CardHeader title={`History · ${closed.length}`} className="border-t" />
+            <div className="divide-y divide-[#E7E3DA] max-h-80 overflow-y-auto">{closed.map(a => <Item key={a.id} a={a} />)}</div>
+          </Card>
 
-      <div className="p-6 space-y-4 max-w-[1720px] w-full mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          
-          {/* Left Column (5 cols): Closure Card */}
-          <div className="lg:col-span-5 bg-white rounded-lg border border-[#E7E3DA] p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-[#E7E3DA] pb-3">
-              <div className="flex items-center gap-2">
-                <DecisionChip decision="CLOSE" size="sm" />
-                <span className="font-semibold text-xs text-[#1F2933]">
-                  Closure order
-                </span>
-              </div>
-
-              {approval.status === 'pending' ? (
-                <div className="flex items-center gap-1.5 text-xs text-[#7A5B00] bg-[#FBF1CC] px-2 py-0.5 rounded font-mono">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>{formatTimer(secondsRemaining)}</span>
-                </div>
-              ) : (
-                <span className="px-2 py-0.5 rounded text-xs font-medium bg-[#DFF1E5] text-[#2F6B45]">
-                  Approved
-                </span>
-              )}
-            </div>
-
-            {/* Target sector info */}
-            <div className="text-xs space-y-1">
-              <div className="font-semibold text-[#1F2933]">
-                Sector S-07 Jatinga–Harangajao (km 166–178)
-              </div>
-              <div className="text-[#6B7280]">
-                Holding at Haflong (north) and Silchar (south).
-              </div>
-            </div>
-
-            {/* Closure type selector */}
-            <div className="space-y-1.5 pt-1">
-              <label className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider block">
-                Modality
-              </label>
-
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setClosureType('FULL')}
-                  className={`py-2 px-1 rounded-md border text-center font-medium transition-colors ${
-                    closureType === 'FULL'
-                      ? 'border-[#EEAFAF] bg-[#F8D7D7] text-[#9B2C2C] font-semibold'
-                      : 'border-[#E7E3DA] bg-white text-[#1F2933] hover:bg-[#FAF8F3]'
-                  }`}
-                >
-                  Full
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setClosureType('HEAVY_ONLY')}
-                  className={`py-2 px-1 rounded-md border text-center font-medium transition-colors ${
-                    closureType === 'HEAVY_ONLY'
-                      ? 'border-[#F3E29F] bg-[#FBF1CC] text-[#7A5B00] font-semibold'
-                      : 'border-[#E7E3DA] bg-white text-[#1F2933] hover:bg-[#FAF8F3]'
-                  }`}
-                >
-                  Heavy only
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setClosureType('ONE_WAY')}
-                  className={`py-2 px-1 rounded-md border text-center font-medium transition-colors ${
-                    closureType === 'ONE_WAY'
-                      ? 'border-[#CDE1F4] bg-[#EBF2FA] text-[#2A649C] font-semibold'
-                      : 'border-[#E7E3DA] bg-white text-[#1F2933] hover:bg-[#FAF8F3]'
-                  }`}
-                >
-                  One-way
-                </button>
-              </div>
-            </div>
-
-            {/* Approve / Reject buttons */}
-            <div className="pt-2 flex items-center gap-2">
-              {approval.status === 'pending' ? (
-                <>
-                  <button
-                    onClick={() => approveClosure(closureType)}
-                    className="flex-1 py-2 rounded-lg bg-[#3780C8] hover:bg-[#2A649C] text-white font-medium text-xs flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>Approve</span>
-                  </button>
-                  <button
-                    onClick={rejectClosure}
-                    className="px-3 py-2 rounded-lg border border-[#E7E3DA] text-[#6B7280] hover:text-[#9B2C2C] text-xs transition-colors"
-                  >
-                    Reject
-                  </button>
-                </>
-              ) : (
-                <div className="w-full text-xs text-[#2F6B45] bg-[#DFF1E5] p-2.5 rounded-lg border border-[#BDE3C9] flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>Order approved ({approval.closureType})</span>
-                </div>
-              )}
-            </div>
-
-          </div>
-
-          {/* Right Column (7 cols): Multilingual Alert Preview */}
-          <div className="lg:col-span-7 bg-white rounded-lg border border-[#E7E3DA] p-5 shadow-xs space-y-4">
-            
-            <div className="flex items-center justify-between border-b border-[#E7E3DA] pb-2">
-              <span className="font-semibold text-xs text-[#1F2933]">Alert broadcast</span>
-              <button
-                onClick={() => setShowCapModal(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-[#3780C8] text-[#3780C8] hover:bg-[#3780C8]/10 text-xs font-medium transition-colors"
-              >
-                <Code2 className="w-3.5 h-3.5" />
-                <span>Export CAP</span>
-              </button>
-            </div>
-
-            {/* Language tabs */}
-            <div className="flex items-center gap-1 overflow-x-auto text-xs pb-1 scrollbar-none">
-              {(['en', 'hi', 'as', 'bn', 'dimasa'] as const).map(l => (
-                <button
-                  key={l}
-                  onClick={() => setActiveLang(l)}
-                  className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                    activeLang === l
-                      ? 'bg-[#3780C8] text-white'
-                      : 'bg-[#FAF8F3] text-[#6B7280] hover:text-[#1F2933]'
-                  }`}
-                >
-                  {langLabels[l]}
-                </button>
-              ))}
-            </div>
-
-            {/* Draft content */}
-            <div className="p-3.5 rounded-lg bg-[#FAF8F3] border border-[#E7E3DA] text-xs text-[#1F2933] leading-relaxed font-medium">
-              {approval.drafts[activeLang]}
-            </div>
-
-            {/* Small validation row */}
-            <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-[#E7E3DA] text-xs text-[#6B7280]">
-              <span className="font-medium text-[#1F2933]">Validation</span>
-              <div className="flex items-center gap-3">
-                <span className="text-[#2F6B45] font-medium">Places ✓</span>
-                <span className="text-[#2F6B45] font-medium">Times ✓</span>
-                <span className="text-[#2F6B45] font-medium">Decision ✓</span>
-              </div>
-            </div>
-
-          </div>
-
+          <Card className="lg:col-span-8">
+            {selected ? (
+              <>
+                <CardHeader title={`${KIND[selected.kind].label} · ${selected.id}`} right={<ApprovalBadge status={selected.status} />} />
+                {selected.kind === 'closure' && <ClosureDetail a={selected} />}
+                {selected.kind === 'reopening' && <ReopeningDetail a={selected} />}
+                {selected.kind === 'alert' && <AlertDetail a={selected} alert={snap.alerts.find(x => x.id === selected.alertId)!} />}
+              </>
+            ) : (
+              <Empty>No approvals</Empty>
+            )}
+          </Card>
         </div>
-      </div>
-
-      {/* CAP XML Modal */}
-      {showCapModal && (
-        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] flex flex-col shadow-xl border border-[#E7E3DA] overflow-hidden">
-            <div className="h-12 px-4 border-b border-[#E7E3DA] flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#1F2933]">Common Alerting Protocol (CAP XML)</span>
-              <button
-                onClick={() => setShowCapModal(false)}
-                className="p-1 rounded text-[#6B7280] hover:text-[#1F2933]"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-4 overflow-y-auto flex-1 bg-[#FAF8F3] font-mono text-[11px] text-[#1F2933]">
-              <pre className="whitespace-pre-wrap">{approval.capXml}</pre>
-            </div>
-
-            <div className="p-3 border-t border-[#E7E3DA] flex justify-end gap-2">
-              <button
-                onClick={handleDownloadCap}
-                className="px-3 py-1.5 rounded bg-[#3780C8] hover:bg-[#2A649C] text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Download XML</span>
-              </button>
-              <button
-                onClick={() => setShowCapModal(false)}
-                className="px-3 py-1.5 rounded border border-[#E7E3DA] text-[#6B7280] text-xs font-medium"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      </PageBody>
     </div>
   );
 };

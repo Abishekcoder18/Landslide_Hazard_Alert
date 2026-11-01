@@ -1,118 +1,76 @@
 import React, { useState } from 'react';
-import { useDemo } from '../context/DemoContext';
-import { CorridorMap } from '../components/CorridorMap';
-import { RiskBadge, RoadStateBadge } from '../components/Badges';
-import { SegmentDrawer } from '../components/SegmentDrawer';
 import { TopBar } from '../components/TopBar';
+import { CorridorMap } from '../components/CorridorMap';
+import { RiskBadge, RoadStateBadge, SampleTag } from '../components/Badges';
+import { SegmentDrawer } from '../components/SegmentDrawer';
+import { Card, CardHeader, Kpi, PageBody, cx } from '../components/ui';
+import { useCorridor } from '../state/selectors';
 
 export const CorridorPage: React.FC = () => {
-  const { segments, holdingPoints, pendingApprovalsCount, incident } = useDemo();
-  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  const { snap, segments, holdingPoints, decisionByZone, openIncidentBySegment } = useCorridor();
+  const [selected, setSelected] = useState<string | null>(null);
+  const list = Object.values(segments);
 
-  const segmentList = Object.values(segments);
-
-  // 4 KPI tiles: Segments at risk, Active holds, Pending approvals, Open incidents
-  const segmentsAtRisk = segmentList.filter(s => s.riskLevel === 'ORANGE' || s.riskLevel === 'RED' || s.roadState === 'BLOCKED').length;
-  const activeHolds = segmentList.filter(s => s.riskLevel === 'ORANGE' || s.roadState === 'BLOCKED').length;
-  const openIncidents = incident.status !== 'reopened_full' ? 1 : 0;
+  const atRisk = list.filter(s => s.riskLevel === 'ORANGE' || s.riskLevel === 'RED' || s.roadState === 'BLOCKED').length;
+  const holds = Object.values(decisionByZone).filter(d => d.result.decision === 'HOLD' || d.heavyResult?.decision === 'HOLD').length;
+  const noData = list.filter(s => s.riskLevel === 'NO_DATA' || s.roadState === 'UNKNOWN').length;
+  const openApprovals = snap.approvals.filter(a => a.status === 'pending' || a.status === 'escalated').length;
+  const sample = snap.segments.some(s => s.inputs.sample);
 
   return (
     <div className="flex flex-col min-h-screen">
-      <TopBar title="Corridor" />
-
-      <div className="p-6 space-y-4 max-w-[1720px] w-full mx-auto">
-        
-        {/* Above the map: Four small KPI tiles */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-white rounded-lg border border-[#E7E3DA] p-3 shadow-xs">
-            <div className="text-[11px] font-medium text-[#6B7280]">Segments at risk</div>
-            <div className="text-xl font-semibold text-[#1F2933] mt-0.5">{segmentsAtRisk}</div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-[#E7E3DA] p-3 shadow-xs">
-            <div className="text-[11px] font-medium text-[#6B7280]">Active holds</div>
-            <div className="text-xl font-semibold text-[#1F2933] mt-0.5">{activeHolds}</div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-[#E7E3DA] p-3 shadow-xs">
-            <div className="text-[11px] font-medium text-[#6B7280]">Pending approvals</div>
-            <div className="text-xl font-semibold text-[#1F2933] mt-0.5">{pendingApprovalsCount}</div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-[#E7E3DA] p-3 shadow-xs">
-            <div className="text-[11px] font-medium text-[#6B7280]">Open incidents</div>
-            <div className="text-xl font-semibold text-[#1F2933] mt-0.5">{openIncidents}</div>
-          </div>
+      <TopBar title="Corridor" right={sample ? <SampleTag /> : undefined} />
+      <PageBody>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <Kpi label="Segments at risk" value={atRisk} tone={atRisk ? 'alert' : 'default'} />
+          <Kpi label="Zones on HOLD" value={holds} tone={holds ? 'alert' : 'default'} />
+          <Kpi label="No data" value={noData} />
+          <Kpi label="Open approvals" value={openApprovals} />
+          <Kpi label="Open incidents" value={Object.keys(openIncidentBySegment).length} />
         </div>
 
-        {/* Map (about 70% width) + Narrow Right Panel Listing Segments (about 30% width) */}
         <div className="grid grid-cols-1 lg:grid-cols-10 gap-4 items-start">
-          
-          {/* Main Map (7 cols) */}
           <div className="lg:col-span-7">
             <CorridorMap
               segments={segments}
               holdingPoints={holdingPoints}
-              selectedSegmentId={selectedSegmentId}
-              onSelectSegment={segId => setSelectedSegmentId(segId)}
-              heightClass="h-[620px]"
+              zones={snap.zones}
+              selectedSegmentId={selected}
+              onSelectSegment={setSelected}
+              heightClass="h-[560px]"
             />
           </div>
 
-          {/* Narrow Right Panel Listing Segments (3 cols) */}
-          <div className="lg:col-span-3 bg-white rounded-lg border border-[#E7E3DA] shadow-xs flex flex-col h-[620px] overflow-hidden">
-            <div className="px-3.5 py-2.5 border-b border-[#E7E3DA] flex items-center justify-between text-xs font-medium text-[#6B7280]">
-              <span>Segments ({segmentList.length})</span>
-              <span>NH-27</span>
-            </div>
-
+          <Card className="lg:col-span-3 flex flex-col h-[560px] overflow-hidden">
+            <CardHeader title={`Segments · ${list.length}`} right={<span className="text-[11px] text-[#6B7280]">Risk Index</span>} />
             <div className="flex-1 overflow-y-auto divide-y divide-[#E7E3DA]">
-              {segmentList.map(seg => {
-                const isSelected = selectedSegmentId === seg.id;
-                return (
-                  <div
-                    key={seg.id}
-                    onClick={() => setSelectedSegmentId(seg.id)}
-                    className={`p-3 transition-colors cursor-pointer text-xs ${
-                      isSelected 
-                        ? 'bg-[#3780C8]/10' 
-                        : 'hover:bg-[#FAF8F3]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-1.5 mb-1.5">
-                      <span className="font-semibold text-[#1F2933] truncate">
-                        {seg.name}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <RiskBadge level={seg.riskLevel} size="sm" />
-                        <RoadStateBadge state={seg.roadState} />
-                      </div>
-                      <span className="text-[11px] text-[#6B7280] font-mono shrink-0">
-                        {seg.kmRange.replace('km ', '')}
-                      </span>
-                    </div>
+              {list.map(seg => (
+                <button
+                  key={seg.id}
+                  onClick={() => setSelected(seg.id)}
+                  className={cx('w-full text-left px-4 py-2.5 transition-colors', selected === seg.id ? 'bg-[#3780C8]/10' : 'hover:bg-[#FAF8F3]')}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-medium text-[#1F2933] truncate">
+                      <span className="font-mono text-[#6B7280] mr-1.5">{seg.id}</span>
+                      {seg.name}
+                    </span>
+                    <span className="text-[12px] font-mono text-[#6B7280] tabular-nums">{seg.riskIndex ?? '—'}</span>
                   </div>
-                );
-              })}
+                  <div className="flex items-center justify-between gap-2 mt-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <RiskBadge level={seg.riskLevel} />
+                      <RoadStateBadge state={seg.roadState} />
+                    </div>
+                    <span className="text-[11px] font-mono text-[#6B7280]">km {seg.startKm}–{seg.endKm}</span>
+                  </div>
+                </button>
+              ))}
             </div>
-
-            <div className="p-2 border-t border-[#E7E3DA] text-[11px] text-[#6B7280] bg-[#FAF8F3] text-center">
-              Click segment to open details
-            </div>
-          </div>
-
+          </Card>
         </div>
-
-      </div>
-
-      {/* Segment details drawer */}
-      <SegmentDrawer
-        segmentId={selectedSegmentId}
-        onClose={() => setSelectedSegmentId(null)}
-      />
+      </PageBody>
+      <SegmentDrawer segmentId={selected} onClose={() => setSelected(null)} />
     </div>
   );
 };
