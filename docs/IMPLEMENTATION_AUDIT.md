@@ -9,7 +9,9 @@ Nothing here is a field result. All corridor values are **sample data**; map geo
 
 | Check | Result | Evidence |
 |---|---|---|
-| `npm test` | 43 pass, 0 fail | `docs/evidence/verification-2026-11-01.txt` |
+| `npm test` | 43 pass, 0 fail |
+| `backend: python -m pytest` | 35 pass, 0 fail (incl. 9,600-case TS↔Python parity, real PostGIS) | `docs/evidence/verification-2026-11-01.txt` |
+| Browser run against FastAPI + PostGIS (`VITE_API_URL`) | full 6-role flow, 51 API calls, 0 errors | — | `docs/evidence/verification-2026-11-01.txt` |
 | `npm run lint` (`tsc --noEmit`) | pass | same |
 | `npm run build` | pass (bundle > 500 kB warning) | same |
 | Browser run, 6 roles, full workflow (Playwright, Chromium) | 0 page errors, 0 console errors; no visible "demo" text | `docs/evidence/01…22-*.png` |
@@ -32,38 +34,38 @@ Nothing here is a field result. All corridor values are **sample data**; map geo
 | AC-11 | FR-13–15 expected wait = estimate − now, labelled | **T U** | `15-incident-log.png`, `16-…` | |
 | AC-12 | FR-16 window-closing, no hurry wording | **T** | engine + alert validator forbidden words | Flag shown to control-room roles only. |
 | AC-13 | FR-18 decision, inputs, time stored | **T U** | Records › Decision record | CSV export. |
-| AC-14 | FR-19/21 class, share blocked, confidence | **P U** | Reports › New report | Web upload works. Photo check is **simulated** for the two labelled sample photos; uploaded photos go to manual review until the Claude vision endpoint exists (**B**). |
+| AC-14 | FR-19/21 class, share blocked, confidence | **T** (backend) | `backend/app/ai.py`, `backend/tests/test_api.py`, `test_ai.py` | Claude Sonnet 5.5 photo check implemented and tested with a stand-in model; **not yet run with a real key** (no key available). Without a key, reports go to manual review. Sample mode in the browser stays simulated. |
 | AC-15 | FR-22 outside corridor / old → flagged | **T** | `reportChecks.test.ts` | |
 | AC-16 | FR-22 grouping into one incident | **T U** | `reportChecks.test.ts` | Confirming one report confirms its group and links all to one incident. |
 | AC-17 | FR-23–25 confirm → BLOCKED + re-evaluate; reject → no change | **T U** | `server.test.ts`, `06-…` | |
 | AC-18 | BR-07 AI alone never changes state | **T** | `server.test.ts` | AI writes an audit "flag" only. |
-| AC-19 | BR-10 injected note has no effect | **T** | `server.test.ts` | Re-test once a real model reads reports (**B**). |
+| AC-19 | BR-10 injected note has no effect | **T** | `server.test.ts`, `backend/tests/test_api.py`, `test_ai.py` | Note is sent to the model only inside a `<report_metadata>` data block; model output cannot change state. Re-check with a real key. |
 | AC-20 | FR-26 AI unavailable → manual review | **T U** | `server.test.ts`, Configuration toggle | |
-| AC-21 | FR-27/28/30 alerts match or are blocked | **T U** | `alerts.test.ts`, `11-alert-blocked.png` | Validator + templates done. LLM fill/translation is backend (**B**); hi/as/bn templates need native review. |
+| AC-21 | FR-27/28/30 alerts match or are blocked | **T U** | `alerts.test.ts`, `backend/tests/test_api.py` | Alert writer (Claude) implemented in the backend; every generated text is validated and mismatches are blocked (tested with a stand-in model). hi/as/bn templates need native review. |
 | AC-22 | FR-31 CAP Severe/Immediate/certainty/area | **T U** | `alerts.test.ts`, `12-cap-export.png` | |
-| AC-23 | FR-33 patrol refused | **T U** | `permissions.test.ts`, `server.test.ts` | Real authentication is backend (**B**). |
+| AC-23 | FR-33 patrol refused | **T U** | `permissions.test.ts`, `backend/tests/test_api.py` | Enforced by the backend on every command (403 + audit entry). Sign-in is a signed token, no password yet. |
 | AC-24 | FR-08 one zone per direction; decision inside geofence | **P T** | seed + `server.test.ts` | One zone per direction per risky segment; geofence used as map ring and CAP area. No vehicle location by design. |
 | AC-25 | FR-20 field-app channel | **—** | — | Not Verified (field-app photo upload unconfirmed). |
 
-**Summary:** 20 of 25 tested; 3 partial (AC-08 OSRM, AC-14 real photo AI, AC-24 geofence use); 2 not started (AC-01 needs data, AC-25 field app).
+**Summary:** 21 of 25 tested (84%); 2 partial (AC-08 OSRM, AC-24 geofence use); 2 not started (AC-01 needs data, AC-25 field app). AC-14 and AC-21 are tested with a stand-in model and still need one run with a real API key.
 
 ## Stories (backlog ST-01–ST-25)
 
 | Story | Status | Story | Status |
 |---|---|---|---|
 | ST-01 segmentation | — (data) | ST-14 field app | — (Not Verified) |
-| ST-02 inputs | P (sample inputs; feeds **B**) | ST-15 auto checks | T |
+| ST-02 inputs | P (sample inputs; feeds **B**) | ST-15 auto checks | T (PostGIS distance in backend) |
 | ST-03 risk map + reasons | T U | ST-16 queue confirm/reject | T U |
 | ST-04 validity + config | T U | ST-17 AI outage | T U |
-| ST-05 approach zones | T U (P geofence) | ST-18 validated alerts | P (validator T; LLM **B**) |
+| ST-05 approach zones | T U (P geofence) | ST-18 validated alerts | T (Claude writer + validator in backend; real-key run pending) |
 | ST-06 decision table | T U | ST-19 Dimasa | — (translator pending; UI marks pending) |
 | ST-07 diversion | T (OSRM **B**) | ST-20 CAP export | T U |
-| ST-08 holding point | T U | ST-21 login | U (role sign-in; real auth **B**) |
+| ST-08 holding point | T U | ST-21 login | T U (signed token; no password yet) |
 | ST-09 CLOSE + escalation | T U | ST-22 permissions | T U |
-| ST-10 incident log + estimate | T U | ST-23 audit log | U (append-only in UI/mock) |
+| ST-10 incident log + estimate | T U | ST-23 audit log | T (PostgreSQL trigger blocks UPDATE/DELETE) |
 | ST-11 window closing | T | ST-24 offline cache | — (Could, not in scope) |
 | ST-12 equipment | U | ST-25 SMS | — (Could, not in scope) |
-| ST-13 web upload + AI | P (simulated AI) | | |
+| ST-13 web upload + AI | T (backend Claude photo check; real-key run pending) | | |
 
 ## UI evidence sheet mapping
 
@@ -90,10 +92,8 @@ Nothing here is a field result. All corridor values are **sample data**; map geo
 - SM3 in mock mode measures only engine time (~1 ms); with the backend it will include the AI photo-check time.
 - Holding-point names and Silchar-side town remain **pending verification** (marked "Provisional").
 
-## Next (backend)
+## Next
 
-1. FastAPI service implementing `docs/API_CONTRACT.md` over PostGIS.
+1. Run once with a real `ANTHROPIC_API_KEY` (AC-14, AC-19, AC-21) and record the result.
 2. Segmentation script from the team GeoPackage (AC-01).
-3. Claude Sonnet 5.5 photo-check endpoint (AC-14, re-run AC-19).
-4. LLM alert fill/translation feeding `validateAlert` (AC-21).
-5. OSRM diversion candidates (AC-08 / FR-10).
+3. OSRM diversion candidates (AC-08 / FR-10).

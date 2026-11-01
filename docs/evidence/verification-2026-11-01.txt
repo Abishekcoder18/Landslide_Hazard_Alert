@@ -92,7 +92,7 @@ ok 43 - BR-12: an expired Risk Level displays as No data
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 406.005674
+# duration_ms 387.350183
 
 $ npm run lint
 
@@ -122,6 +122,44 @@ dist/assets/index-DtX00NfO.js   550.78 kB │ gzip: 163.04 kB
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.24s
+✓ built in 1.11s
 
-Browser run (Playwright, Chromium, 6 roles): 0 page errors, 0 console errors, no visible 'demo' text; screenshots docs/evidence/01-23
+$ cd backend && python -m pytest -v
+tests/test_ai.py::test_no_key_means_unavailable PASSED                   [  2%]
+tests/test_ai.py::test_photo_request_shape_and_parse PASSED              [  5%]
+tests/test_ai.py::test_clear_forces_zero_share_and_unknown_class_rejected PASSED [  8%]
+tests/test_ai.py::test_failures_are_safe[response0-None] PASSED          [ 11%]
+tests/test_ai.py::test_failures_are_safe[response1-None] PASSED          [ 14%]
+tests/test_ai.py::test_failures_are_safe[response2-None] PASSED          [ 17%]
+tests/test_ai.py::test_failures_are_safe[None-exc3] PASSED               [ 20%]
+tests/test_ai.py::test_failures_are_safe[None-exc4] PASSED               [ 22%]
+tests/test_ai.py::test_alert_writer_returns_four_languages PASSED        [ 25%]
+tests/test_api.py::test_health_and_auth PASSED                           [ 28%]
+tests/test_api.py::test_seed_persisted_in_postgis PASSED                 [ 31%]
+tests/test_api.py::test_upload_photo_ai_postgis_corridor_check PASSED    [ 34%]
+tests/test_api.py::test_ai_failure_goes_to_manual_review PASSED          [ 37%]
+tests/test_api.py::test_rejects_bad_upload PASSED                        [ 40%]
+tests/test_api.py::test_closure_alert_llm_cap_and_permissions PASSED     [ 42%]
+tests/test_api.py::test_llm_mismatch_blocked PASSED                      [ 45%]
+tests/test_api.py::test_escalation_and_append_only_audit PASSED          [ 48%]
+tests/test_api.py::test_reopening_flow_and_expected_wait PASSED          [ 51%]
+tests/test_parity.py::test_decision_engine_matches_typescript PASSED     [ 54%]
+tests/test_parity.py::test_risk_index_matches_typescript PASSED          [ 57%]
+tests/test_parity.py::test_alerts_match_typescript PASSED                [ 60%]
+tests/test_workflow.py::test_seed_matches_frontend PASSED                [ 62%]
+tests/test_workflow.py::test_ac18_ai_alone_never_changes_state PASSED    [ 65%]
+tests/test_workflow.py::test_ac19_injected_note_has_no_effect PASSED     [ 68%]
+tests/test_workflow.py::test_ac17_confirm_blocks_and_records_sm3 PASSED  [ 71%]
+tests/test_workflow.py::test_ac17_reject_changes_nothing PASSED          [ 74%]
+tests/test_workflow.py::test_ac20_ai_unavailable_manual_review PASSED    [ 77%]
+tests/test_workflow.py::test_ac15_outside_corridor_flagged PASSED        [ 80%]
+tests/test_workflow.py::test_ac10_escalation_and_second_approver PASSED  [ 82%]
+tests/test_workflow.py::test_ac23_patrol_refused_and_logged PASSED       [ 85%]
+tests/test_workflow.py::test_full_flow_alert_cap_estimate_reopening PASSED [ 88%]
+tests/test_workflow.py::test_llm_texts_validated_or_blocked PASSED       [ 91%]
+tests/test_workflow.py::test_ac12_window_closing_end_to_end PASSED       [ 94%]
+tests/test_workflow.py::test_ac03_expiry_recomputes_to_no_data PASSED    [ 97%]
+tests/test_workflow.py::test_clear_passage_orange_only_officer PASSED    [100%]
+======================== 35 passed, 1 warning in 6.33s =========================
+
+Browser run (Playwright, Chromium, 6 roles) in sample mode and against FastAPI + PostGIS: 0 page errors, 0 console errors; backend run: 51 API calls, no 4xx/5xx

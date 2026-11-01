@@ -14,7 +14,7 @@ npm run lint
 npm run build
 ```
 
-Sign in with any user ID and a role. Without `VITE_API_URL` the app runs on an in-browser sample-data server (`src/api/mock/server.ts`); set `VITE_API_URL` to use the FastAPI backend (`docs/API_CONTRACT.md`).
+Sign in with any user ID and a role. Without `VITE_API_URL` the app runs on an in-browser sample-data server (`src/api/mock/server.ts`). To use the real backend (FastAPI + PostgreSQL/PostGIS + Claude), follow `backend/README.md` and put `VITE_API_URL=http://localhost:8000` in `.env.local`.
 
 ## Layout
 
@@ -22,6 +22,8 @@ Sign in with any user ID and a role. Without `VITE_API_URL` the app runs on an i
 |---|---|
 | `src/domain/` | Pure rules: decision engine, Risk Index, report checks, alerts + validator + CAP, permissions (with tests) |
 | `src/api/` | `ResilionApi` contract, HTTP client, sample-data server |
+| `backend/` | FastAPI + PostGIS backend, Claude photo check and alert writer |
+| `scripts/parity-fixture.ts` | Generates the TS↔Python parity fixture used by `backend/tests/test_parity.py` |
 | `src/pages/` | Corridor, Reports, Decisions, Approvals, Incidents, Records, Configuration, Login |
 | `docs/IMPLEMENTATION_AUDIT.md` | Status against AC-01–AC-25 and ST-01–ST-25 |
 | `docs/evidence/` | Test/build output and screenshots |
