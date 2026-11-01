@@ -1,0 +1,333 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Segment, SafeHoldingPoint } from '../types';
+import L from 'leaflet';
+import { Map, Layers, Navigation, AlertTriangle } from 'lucide-react';
+
+interface CorridorMapProps {
+  segments: Record<string, Segment>;
+  holdingPoints: Record<string, SafeHoldingPoint>;
+  selectedSegmentId?: string | null;
+  onSelectSegment?: (segmentId: string) => void;
+  heightClass?: string;
+}
+
+const MAP_LINE_COLORS: Record<string, string> = {
+  GREEN: '#4CAF7A',
+  YELLOW: '#E0B33A',
+  ORANGE: '#E8894A',
+  RED: '#D45555',
+  NO_DATA: '#9CA3AF'
+};
+
+export const CorridorMap: React.FC<CorridorMapProps> = ({
+  segments,
+  holdingPoints,
+  selectedSegmentId,
+  onSelectSegment,
+  heightClass = 'h-[540px]'
+}) => {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const layersGroupRef = useRef<L.FeatureGroup | null>(null);
+  const [viewMode, setViewMode] = useState<'osm' | 'schematic'>('osm');
+  const [tilesLoadedFailed, setTilesLoadedFailed] = useState<boolean>(false);
+
+  const handleSegmentClick = (segId: string) => {
+    if (onSelectSegment) {
+      onSelectSegment(segId);
+    }
+  };
+
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    if (!mapInstanceRef.current) {
+      try {
+        const map = L.map(mapContainerRef.current, {
+          center: [25.26, 93.04],
+          zoom: 10,
+          minZoom: 9,
+          maxZoom: 15,
+          zoomControl: false
+        });
+
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap',
+          maxZoom: 18
+        });
+
+        tileLayer.on('tileerror', () => {
+          setTilesLoadedFailed(true);
+        });
+
+        tileLayer.addTo(map);
+
+        const layersGroup = L.featureGroup().addTo(map);
+        layersGroupRef.current = layersGroup;
+        mapInstanceRef.current = map;
+      } catch (err) {
+        console.error('Map init error:', err);
+        setViewMode('schematic');
+      }
+    }
+
+    const map = mapInstanceRef.current;
+    const group = layersGroupRef.current;
+    if (map && group) {
+      group.clearLayers();
+
+      // Render road segments
+      Object.values(segments).forEach(seg => {
+        const isSelected = selectedSegmentId === seg.id;
+        const color = MAP_LINE_COLORS[seg.riskLevel] || '#9CA3AF';
+        const isBlocked = seg.roadState === 'BLOCKED';
+
+        const polyline = L.polyline(seg.coordinates, {
+          color: isBlocked ? '#D45555' : color,
+          weight: isSelected ? 8 : 6,
+          opacity: 0.95,
+          dashArray: seg.riskLevel === 'NO_DATA' ? '6, 6' : undefined,
+          lineCap: 'round',
+          lineJoin: 'round'
+        });
+
+        polyline.bindTooltip(
+          `<div style="font-family: Inter, sans-serif; font-size: 12px; line-height: 1.3;">
+            <strong style="color: #1F2933;">${seg.name}</strong><br/>
+            <span>${seg.roadState} · ${seg.riskLevel}</span>
+          </div>`,
+          { sticky: true, className: 'resilion-map-tooltip' }
+        );
+
+        polyline.on('click', () => {
+          handleSegmentClick(seg.id);
+        });
+
+        polyline.addTo(group);
+
+        // Marker at segment center
+        const markerIcon = L.divIcon({
+          className: 'custom-segment-pin',
+          html: `<div style="
+            background-color: ${isBlocked ? '#D45555' : color};
+            color: white;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+            white-space: nowrap;
+            transform: translate(-50%, -50%);
+          ">
+            ${seg.id}
+          </div>`
+        });
+
+        const marker = L.marker(seg.center, { icon: markerIcon });
+        marker.on('click', () => handleSegmentClick(seg.id));
+        marker.addTo(group);
+      });
+
+      // Render Safe Holding Points
+      Object.values(holdingPoints).forEach(hp => {
+        const hostSeg = segments[hp.segmentId];
+        if (!hostSeg) return;
+
+        const hpIcon = L.divIcon({
+          className: 'custom-hp-pin',
+          html: `<div style="
+            background-color: #3780C8;
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 6px;
+            border: 1px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+            white-space: nowrap;
+            transform: translate(-50%, -100%);
+          ">
+            ${hp.name.split(' ')[0]} Holding
+          </div>`
+        });
+
+        const hpMarker = L.marker(hostSeg.center, { icon: hpIcon });
+        hpMarker.bindPopup(
+          `<div style="font-family: Inter, sans-serif; font-size: 12px;">
+            <strong style="color: #1F2933;">${hp.name}</strong><br/>
+            <span style="color: #6B7280;">${hp.locationName}</span><br/>
+            <span>Capacity: ${hp.capacityVehicles} vehicles</span>
+          </div>`
+        );
+        hpMarker.addTo(group);
+      });
+    }
+  }, [viewMode, segments, holdingPoints, selectedSegmentId]);
+
+  return (
+    <div className={`relative rounded-lg border border-[#E7E3DA] overflow-hidden bg-white ${heightClass}`}>
+      
+      {/* Top Map Toolbar */}
+      <div className="absolute top-3 left-3 z-[1000] flex items-center gap-2 bg-white/95 px-3 py-1.5 rounded-lg border border-[#E7E3DA] shadow-xs text-xs font-medium text-[#1F2933]">
+        <Navigation className="w-3.5 h-3.5 text-[#3780C8]" />
+        <span>NH-27 Corridor</span>
+      </div>
+
+      {/* View Mode Switcher */}
+      <div className="absolute top-3 right-3 z-[1000] flex items-center gap-1 bg-white/95 p-1 rounded-lg border border-[#E7E3DA] shadow-xs text-xs">
+        <button
+          onClick={() => setViewMode('osm')}
+          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+            viewMode === 'osm' 
+              ? 'bg-[#3780C8] text-white' 
+              : 'text-[#6B7280] hover:bg-[#FAF8F3]'
+          }`}
+        >
+          OSM
+        </button>
+        <button
+          onClick={() => setViewMode('schematic')}
+          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+            viewMode === 'schematic' 
+              ? 'bg-[#3780C8] text-white' 
+              : 'text-[#6B7280] hover:bg-[#FAF8F3]'
+          }`}
+        >
+          Schematic
+        </button>
+      </div>
+
+      {/* Tiles Load Warning Banner */}
+      {tilesLoadedFailed && viewMode === 'osm' && (
+        <div className="absolute bottom-10 left-3 z-[1000] bg-[#FBF1CC] border border-[#F3E29F] text-[#7A5B00] text-xs px-3 py-1.5 rounded-md flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>Tiles loading fallback</span>
+          <button
+            onClick={() => setViewMode('schematic')}
+            className="underline font-semibold ml-1"
+          >
+            Switch to schematic
+          </button>
+        </div>
+      )}
+
+      {/* Map Container */}
+      <div 
+        ref={mapContainerRef} 
+        className={`w-full h-full z-0 ${viewMode !== 'osm' ? 'hidden' : ''}`} 
+        tabIndex={0} 
+      />
+
+      {/* Stylized Schematic Line */}
+      {viewMode === 'schematic' && (
+        <div className="w-full h-full bg-[#FAF8F3] text-[#1F2933] p-6 overflow-y-auto flex flex-col justify-center z-10 relative">
+          <div className="max-w-3xl mx-auto w-full space-y-6">
+            <div className="flex items-center justify-between border-b border-[#E7E3DA] pb-2">
+              <span className="text-sm font-semibold text-[#1F2933]">
+                Corridor schematic · NH-27 Dima Hasao
+              </span>
+              <span className="text-xs text-[#6B7280] font-mono">
+                110–222 km (112 km)
+              </span>
+            </div>
+
+            <div className="relative py-8 px-4 bg-white rounded-lg border border-[#E7E3DA]">
+              <div className="flex items-center justify-between relative">
+                <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-1.5 bg-[#E7E3DA] rounded-full z-0"></div>
+
+                {Object.values(segments).map(seg => {
+                  const color = MAP_LINE_COLORS[seg.riskLevel] || '#9CA3AF';
+                  const isBlocked = seg.roadState === 'BLOCKED';
+                  const isSelected = selectedSegmentId === seg.id;
+
+                  return (
+                    <div
+                      key={seg.id}
+                      onClick={() => handleSegmentClick(seg.id)}
+                      className="relative z-10 flex flex-col items-center group cursor-pointer"
+                      title={`${seg.name} (${seg.roadState}, ${seg.riskLevel})`}
+                    >
+                      {seg.id === 'S-05' && (
+                        <div className="absolute -top-6 text-[10px] font-medium bg-[#3780C8] text-white px-1.5 py-0.5 rounded shadow-xs whitespace-nowrap">
+                          Haflong
+                        </div>
+                      )}
+
+                      <div
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold border-2 transition-transform group-hover:scale-110 ${
+                          isSelected ? 'ring-2 ring-[#3780C8]' : ''
+                        }`}
+                        style={{
+                          backgroundColor: isBlocked ? '#D45555' : color,
+                          borderColor: '#FFFFFF',
+                          color: '#FFFFFF'
+                        }}
+                      >
+                        {seg.id.replace('S-', '')}
+                      </div>
+
+                      <div className="mt-1 text-center">
+                        <span className="block text-[10px] font-medium text-[#1F2933]">
+                          {seg.id}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center gap-4 text-xs text-[#6B7280]">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#4CAF7A]"></span>
+                <span>Green</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#E0B33A]"></span>
+                <span>Yellow</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#E8894A]"></span>
+                <span>Orange</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#D45555]"></span>
+                <span>Red/Blocked</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#9CA3AF]"></span>
+                <span>No data</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Floating Legend */}
+      <div className="absolute bottom-3 left-3 z-[1000] hidden sm:flex items-center gap-3 bg-white/95 px-3 py-1.5 rounded-md border border-[#E7E3DA] text-xs text-[#6B7280]">
+        <span className="font-medium text-[#1F2933]">Risk</span>
+        <div className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-[#4CAF7A]"></span>
+          <span>Green</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-[#E0B33A]"></span>
+          <span>Yellow</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-[#E8894A]"></span>
+          <span>Orange</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-[#D45555]"></span>
+          <span>Red</span>
+        </div>
+      </div>
+
+    </div>
+  );
+};

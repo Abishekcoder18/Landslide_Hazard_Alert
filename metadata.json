@@ -1,0 +1,6 @@
+{
+  "name": "RESILION 2.0 — Safe Passage Control",
+  "description": "Landslide hazard decision and safe passage control system for hill roads on NH-27, Dima Hasao, Assam. Stop people before the danger zone, not inside it.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

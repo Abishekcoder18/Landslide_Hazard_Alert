@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #FAF8F3;
+    color: #1F2933;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+}
+
+/* Custom stripe pattern for No data */
+.bg-striped-gray {
+  background-image: repeating-linear-gradient(45deg, #ECECEC, #ECECEC 6px, #E2E8F0 6px, #E2E8F0 12px);
+}
+
+/* Leaflet Map Custom Styling */
+.leaflet-container {
+  font-family: 'Inter', sans-serif !important;
+  z-index: 10;
+  background-color: #FAF8F3 !important;
+}
+
+.resilion-map-tooltip {
+  background: #FFFFFF !important;
+  border: 1px solid #E7E3DA !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+  padding: 6px 10px !important;
+  color: #1F2933 !important;
+}
+
+.custom-segment-pin, .custom-hp-pin {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Custom Scrollbar utilities */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
