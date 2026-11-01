@@ -440,6 +440,7 @@ export const INITIAL_APPROACH_ZONES: ApproachZone[] = [
     segmentId: 'S-07',
     targetSegmentName: 'S-07 Jatinga–Harangajao',
     nearestHoldingPointId: 'HP-HAFLONG',
+    fallbackHoldingPointIds: ['HP-LUMDING'],
     locationKm: 'km 164.5 (2 km before danger zone)',
     diversionRoutes: [
       {
@@ -472,6 +473,7 @@ export const INITIAL_APPROACH_ZONES: ApproachZone[] = [
     segmentId: 'S-06',
     targetSegmentName: 'S-06 Mahur–Haflong Hill',
     nearestHoldingPointId: 'HP-HAFLONG',
+    fallbackHoldingPointIds: ['HP-LUMDING'],
     locationKm: 'km 154.2',
     diversionRoutes: []
   },

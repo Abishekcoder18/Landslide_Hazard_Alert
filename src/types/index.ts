@@ -49,6 +49,7 @@ export interface ApproachZone {
   segmentId: string; // target segment 'S-07'
   targetSegmentName: string;
   nearestHoldingPointId: string;
+  fallbackHoldingPointIds?: string[]; // BR-04: next points back, in order
   locationKm: string;
   diversionRoutes?: {
     name: string;
@@ -85,6 +86,7 @@ export interface DecisionResult {
   };
   expectedWaitMinutes?: number;
   windowClosing: boolean;
+  closeRecommended: boolean; // BR-01: BLOCKED or Red
   travellerAdvisory: string;
 }
 

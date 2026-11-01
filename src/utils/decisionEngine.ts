@@ -10,7 +10,9 @@ import {
 
 export interface EvaluateOptions {
   vehicleType?: 'all' | 'heavy' | 'light';
-  reopeningEstimateText?: string;
+  /** Officer-entered reopening estimate; expected wait = estimate - now (labelled est.). */
+  reopeningEstimate?: Date;
+  now?: Date;
 }
 
 /**
@@ -129,9 +131,56 @@ export function checkHoldingPointEligibility(
   };
 }
 
+/** Parses an officer-entered clock time such as "4:00 PM" onto the reference day. */
+export function parseClockTime(text: string | undefined, reference: Date = new Date()): Date | undefined {
+  if (!text) return undefined;
+  const m = text.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!m) return undefined;
+  let h = Number(m[1]);
+  const min = Number(m[2]);
+  const ampm = m[3]?.toUpperCase();
+  if (min > 59 || h > 23 || (ampm && (h < 1 || h > 12))) return undefined;
+  if (ampm === 'PM' && h !== 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  const d = new Date(reference);
+  d.setHours(h, min, 0, 0);
+  return d;
+}
+
 /**
- * Core pure decision engine for RESILION 2.0.
- * Follows section 6 specifications strictly.
+ * BR-04: use the nearest holding point only while its own segment is OPEN and Green/Yellow;
+ * otherwise walk back through the zone's fallback chain (e.g. Haflong -> Lumding).
+ */
+export function selectHoldingPoint(
+  zone: ApproachZone,
+  allSegments: Record<string, Segment>,
+  holdingPoints: Record<string, SafeHoldingPoint>
+): { holdingPoint?: SafeHoldingPoint; holdingEligibility: { isEligible: boolean; reason: string } } {
+  const chain = [zone.nearestHoldingPointId, ...(zone.fallbackHoldingPointIds || [])];
+  const reasons: string[] = [];
+  for (const id of chain) {
+    const hp = holdingPoints[id];
+    const check = checkHoldingPointEligibility(hp, allSegments);
+    if (check.isEligible) {
+      return {
+        holdingPoint: hp,
+        holdingEligibility: {
+          isEligible: true,
+          reason: reasons.length ? `${reasons.join(' ')} Fallback: ${check.reason}` : check.reason
+        }
+      };
+    }
+    reasons.push(check.reason);
+  }
+  return {
+    holdingPoint: undefined,
+    holdingEligibility: { isEligible: false, reason: `No eligible holding point. ${reasons.join(' ')}` }
+  };
+}
+
+/**
+ * Core pure decision engine for RESILION 2.0 (BR-01, BR-02, BR-03, BR-04, BR-06, BR-11).
+ * Rules are checked from most to least restrictive so the most restrictive decision wins (BR-02).
  */
 export function evaluateApproachZoneDecision(
   zone: ApproachZone,
@@ -141,16 +190,14 @@ export function evaluateApproachZoneDecision(
   options: EvaluateOptions = {}
 ): DecisionResult {
   const vehicleType = options.vehicleType || 'all';
-  const holdingPoint = holdingPoints[zone.nearestHoldingPointId];
-  const holdingEligibility = checkHoldingPointEligibility(holdingPoint, allSegments);
+  const { holdingPoint, holdingEligibility } = selectHoldingPoint(zone, allSegments, holdingPoints);
+  const holdAt = holdingPoint?.locationName || 'No eligible holding point';
 
-  // Evaluate candidate diversion route
   let diversionCheckResult = {
     isOffered: false,
     routeCandidateName: undefined as string | undefined,
     details: 'No candidate diversion available for this segment.'
   };
-
   if (zone.diversionRoutes && zone.diversionRoutes.length > 0) {
     const candidate = zone.diversionRoutes[0];
     const safety = checkDiversionSafety(candidate.segmentIds, allSegments);
@@ -161,165 +208,137 @@ export function evaluateApproachZoneDecision(
     };
   }
 
-  // Check window closing flag: control room only, when IMD heavy rainfall warning exists on Yellow segment
-  const hasImdWarning = Boolean(
-    targetSegment.inputs?.warnings &&
-    targetSegment.inputs.warnings.toLowerCase().includes('imd') &&
-    (targetSegment.inputs.warnings.toLowerCase().includes('heavy') ||
-     targetSegment.inputs.warnings.toLowerCase().includes('orange') ||
-     targetSegment.inputs.warnings.toLowerCase().includes('red'))
-  );
-  
+  // Expected wait (HOLD only) = reopening estimate - now, never negative, never invented.
+  const now = options.now || new Date();
+  const holdWait = options.reopeningEstimate
+    ? Math.max(0, Math.round((options.reopeningEstimate.getTime() - now.getTime()) / 60000))
+    : undefined;
+
+  const warnings = (targetSegment.inputs?.warnings || '').toLowerCase();
+  const hasImdWarning = warnings.includes('imd') &&
+    (warnings.includes('heavy') || warnings.includes('orange') || warnings.includes('red'));
   const isWindowClosing = targetSegment.riskLevel === 'YELLOW' && hasImdWarning;
 
-  // RULE 1: BLOCKED or RED
+  const base = { holdingPoint, holdingEligibility, diversionCheck: diversionCheckResult, windowClosing: false, closeRecommended: false };
+
+  // RULE 1: BLOCKED or RED -> CLOSE recommended; DIVERT if checked diversion exists, else HOLD
   if (targetSegment.roadState === 'BLOCKED' || targetSegment.riskLevel === 'RED') {
     if (diversionCheckResult.isOffered) {
       return {
+        ...base,
+        closeRecommended: true,
         decision: 'DIVERT',
         ruleId: 'R-BLOCKED-RED-DIVERT',
-        ruleExplanation: `Target segment ${targetSegment.id} is ${targetSegment.roadState} (${targetSegment.riskLevel} risk). Checked diversion route via ${diversionCheckResult.routeCandidateName} is fully verified safe.`,
+        ruleExplanation: `${targetSegment.id} ${targetSegment.roadState} / ${targetSegment.riskLevel}. Diversion ${diversionCheckResult.routeCandidateName} checked safe.`,
         actionText: `Divert via ${diversionCheckResult.routeCandidateName}`,
-        holdingPoint,
-        holdingEligibility,
-        diversionCheck: diversionCheckResult,
-        windowClosing: false,
-        travellerAdvisory: `Road ahead at ${targetSegment.name} is BLOCKED. Proceed via safe diversion ${diversionCheckResult.routeCandidateName}.`
-      };
-    } else {
-      return {
-        decision: 'HOLD',
-        ruleId: 'R-BLOCKED-RED-HOLD',
-        ruleExplanation: `Target segment ${targetSegment.id} is ${targetSegment.roadState} (${targetSegment.riskLevel} risk). ${diversionCheckResult.details} -> HOLD before danger zone at ${holdingPoint?.name || 'safe staging point'}.`,
-        actionText: `Hold at ${holdingPoint?.locationName || 'Holding Area'}`,
-        holdingPoint,
-        holdingEligibility,
-        diversionCheck: diversionCheckResult,
-        expectedWaitMinutes: 180,
-        windowClosing: false,
-        travellerAdvisory: `Hold at ${holdingPoint?.locationName || 'Staging Point'} — road ahead blocked between ${targetSegment.name.replace(/S-\d+\s*/, '')}. No safe diversion available.`
+        travellerAdvisory: `Road ahead at ${targetSegment.name} closed. Use diversion ${diversionCheckResult.routeCandidateName}.`
       };
     }
+    return {
+      ...base,
+      closeRecommended: true,
+      decision: 'HOLD',
+      ruleId: 'R-BLOCKED-RED-HOLD',
+      ruleExplanation: `${targetSegment.id} ${targetSegment.roadState} / ${targetSegment.riskLevel}. ${diversionCheckResult.details} HOLD: ${holdingEligibility.reason}`,
+      actionText: `Hold at ${holdAt}`,
+      expectedWaitMinutes: holdWait,
+      travellerAdvisory: `Hold at ${holdAt}. Road ahead closed at ${targetSegment.name}. No safe diversion.`
+    };
   }
 
-  // RULE 2: RESTRICTED (heavy vehicles only)
+  // RULE 2: ORANGE -> HOLD before entry (checked before restrictions/unknown: BR-02)
+  if (targetSegment.riskLevel === 'ORANGE') {
+    return {
+      ...base,
+      decision: 'HOLD',
+      ruleId: 'R-ORANGE-HOLD',
+      ruleExplanation: `${targetSegment.id} ORANGE risk. HOLD before entry. Officer may clear passage (logged).`,
+      actionText: `HOLD before entry at ${holdAt}`,
+      expectedWaitMinutes: holdWait,
+      travellerAdvisory: `Hold at ${holdAt} until the road ahead at ${targetSegment.name} is cleared.`
+    };
+  }
+
+  // RULE 3: RESTRICTED heavy-vehicles-only
   if (targetSegment.roadState === 'RESTRICTED_HEAVY') {
     if (vehicleType === 'heavy') {
       return {
+        ...base,
         decision: 'HOLD',
         ruleId: 'R-RESTRICT-HEAVY-HOLD',
-        ruleExplanation: `Target segment ${targetSegment.id} has axle weight/clearance restriction: heavy commercial vehicles prohibited. Heavy vehicles must HOLD.`,
-        actionText: `Heavy vehicles HOLD at ${holdingPoint?.locationName || 'Staging Area'}`,
-        holdingPoint,
-        holdingEligibility,
-        diversionCheck: diversionCheckResult,
-        windowClosing: false,
-        travellerAdvisory: `Heavy commercial vehicles must HOLD at ${holdingPoint?.name || 'holding point'}. Light passenger vehicles may proceed with caution.`
-      };
-    } else {
-      return {
-        decision: 'GO_CAUTION',
-        ruleId: 'R-RESTRICT-HEAVY-LIGHT-GO',
-        ruleExplanation: `Target segment ${targetSegment.id} restricted to light passenger traffic. Heavy vehicles held; light vehicles GO with caution.`,
-        actionText: 'GO with caution (Light vehicles permitted)',
-        holdingPoint,
-        holdingEligibility,
-        diversionCheck: diversionCheckResult,
-        windowClosing: false,
-        travellerAdvisory: `Light vehicles permitted with caution. Avoid stopping under active hill cuts.`
+        ruleExplanation: `${targetSegment.id} closed to heavy vehicles. Heavy vehicles HOLD.`,
+        actionText: `Heavy vehicles HOLD at ${holdAt}`,
+        expectedWaitMinutes: holdWait,
+        travellerAdvisory: `Heavy vehicles hold at ${holdAt}. Light vehicles proceed with caution.`
       };
     }
+    return {
+      ...base,
+      decision: 'GO_CAUTION',
+      ruleId: 'R-RESTRICT-HEAVY-LIGHT-GO',
+      ruleExplanation: `${targetSegment.id} closed to heavy vehicles. Light vehicles GO with caution.`,
+      actionText: 'GO with caution (light vehicles)',
+      travellerAdvisory: `Light vehicles proceed with caution. Heavy vehicles hold at ${holdAt}.`
+    };
   }
 
-  // RULE 3: RESTRICTED (one-way)
+  // RULE 4: RESTRICTED one-way -> GO with caution under police control
   if (targetSegment.roadState === 'RESTRICTED_ONE_WAY') {
     return {
+      ...base,
       decision: 'GO_CAUTION',
       ruleId: 'R-RESTRICT-ONEWAY',
-      ruleExplanation: `Target segment ${targetSegment.id} operating in single-lane alternating convoy mode under police/patrol control.`,
-      actionText: 'GO with caution (Alternating one-way convoy)',
-      holdingPoint,
-      holdingEligibility,
-      diversionCheck: diversionCheckResult,
-      expectedWaitMinutes: 20,
-      windowClosing: false,
-      travellerAdvisory: `Single-lane passage open under police control. Expect short convoy queues; do not overtake.`
+      ruleExplanation: `${targetSegment.id} one-way under police control.`,
+      actionText: 'GO with caution (one-way, police control)',
+      travellerAdvisory: `One-way passage under police control. Follow police directions.`
     };
   }
 
-  // RULE 4: UNKNOWN road state OR NO_DATA risk
+  // RULE 5: UNKNOWN state or NO_DATA risk -> treated as Yellow, never Green (BR-06)
   if (targetSegment.roadState === 'UNKNOWN' || targetSegment.riskLevel === 'NO_DATA') {
     return {
+      ...base,
       decision: 'GO_CAUTION',
       ruleId: 'R-NODATA-UNKNOWN',
-      ruleExplanation: `Target segment ${targetSegment.id} telemetry is UNKNOWN or NO_DATA. Failsafe rule: treated with elevated caution (Yellow equivalence), officer field verification dispatched. Never display as Green.`,
-      actionText: 'GO with caution (Telemetry unverified — patrol en route)',
-      holdingPoint,
-      holdingEligibility,
-      diversionCheck: diversionCheckResult,
-      windowClosing: false,
-      travellerAdvisory: `Telemetry offline for this stretch. Drive with heightened caution and obey on-site highway police directions.`
+      ruleExplanation: `${targetSegment.id} UNKNOWN / No data. Treated as Yellow, never Green.`,
+      actionText: 'GO with caution (No data)',
+      travellerAdvisory: `Road status not confirmed. Drive with caution.`
     };
   }
 
-  // RULE 5: ORANGE risk level
-  if (targetSegment.riskLevel === 'ORANGE') {
-    return {
-      decision: 'HOLD',
-      ruleId: 'R-ORANGE-HOLD',
-      ruleExplanation: `Target segment ${targetSegment.id} is ORANGE risk (debris accumulation/rainfall threshold exceeded). Failsafe rule: HOLD before entry. Officer may clear escorted passage.`,
-      actionText: `HOLD before entry at ${holdingPoint?.locationName || 'designated staging point'}`,
-      holdingPoint,
-      holdingEligibility,
-      diversionCheck: diversionCheckResult,
-      expectedWaitMinutes: 90,
-      windowClosing: false,
-      travellerAdvisory: `High hazard warning ahead at ${targetSegment.name}. Hold at ${holdingPoint?.locationName || 'holding area'} until patrol inspection clears corridor.`
-    };
-  }
-
-  // RULE 6: YELLOW risk level
+  // RULE 6: YELLOW -> GO with caution (+ control-room window-closing flag, BR-11)
   if (targetSegment.riskLevel === 'YELLOW') {
     return {
+      ...base,
+      windowClosing: isWindowClosing,
       decision: 'GO_CAUTION',
       ruleId: isWindowClosing ? 'R-YELLOW-WINDOW-CLOSING' : 'R-YELLOW-CAUTION',
       ruleExplanation: isWindowClosing
-        ? `Target segment ${targetSegment.id} is YELLOW risk with IMD heavy rainfall warning active. Control Room: Window closing flag active. Travellers advised to drive with caution (no hurry message allowed).`
-        : `Target segment ${targetSegment.id} is YELLOW risk. Moderate rainfall/susceptibility. GO with caution advisory.`,
-      actionText: 'GO with caution advisory',
-      holdingPoint,
-      holdingEligibility,
-      diversionCheck: diversionCheckResult,
-      windowClosing: isWindowClosing,
-      travellerAdvisory: `Passage open with caution. Watch for falling stones and wet road conditions on hill curves.`
+        ? `${targetSegment.id} YELLOW with IMD heavy-rainfall warning. Window-closing flag (control room only).`
+        : `${targetSegment.id} YELLOW risk.`,
+      actionText: 'GO with caution',
+      travellerAdvisory: `Proceed with caution. Watch for falling stones on hill curves.`
     };
   }
 
-  // RULE 7: GREEN risk level
-  if (targetSegment.riskLevel === 'GREEN') {
+  // RULE 7: GREEN and OPEN -> GO
+  if (targetSegment.riskLevel === 'GREEN' && targetSegment.roadState === 'OPEN') {
     return {
+      ...base,
       decision: 'GO',
       ruleId: 'R-GREEN-GO',
-      ruleExplanation: `Target segment ${targetSegment.id} is GREEN risk and OPEN. Regular hill road speed limits apply.`,
-      actionText: 'GO (Normal mountain passage)',
-      holdingPoint,
-      holdingEligibility,
-      diversionCheck: diversionCheckResult,
-      windowClosing: false,
-      travellerAdvisory: `Corridor clear. Normal mountain driving precautions apply.`
+      ruleExplanation: `${targetSegment.id} GREEN and OPEN.`,
+      actionText: 'GO',
+      travellerAdvisory: `Road open.`
     };
   }
 
-  // Fallback safe default: GO_CAUTION
   return {
+    ...base,
     decision: 'GO_CAUTION',
     ruleId: 'R-DEFAULT-SAFE',
-    ruleExplanation: `Default failsafe applied for ${targetSegment.id}.`,
+    ruleExplanation: `Default caution for ${targetSegment.id}.`,
     actionText: 'GO with caution',
-    holdingPoint,
-    holdingEligibility,
-    diversionCheck: diversionCheckResult,
-    windowClosing: false,
     travellerAdvisory: `Drive with caution.`
   };
 }

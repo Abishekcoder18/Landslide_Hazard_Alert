@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useDemo } from '../context/DemoContext';
 import { TopBar } from '../components/TopBar';
 import { DecisionChip, EstTag } from '../components/Badges';
-import { evaluateApproachZoneDecision, SCRIPTED_SCENARIOS, runScriptedScenario } from '../utils/decisionEngine';
+import { evaluateApproachZoneDecision, SCRIPTED_SCENARIOS, runScriptedScenario, parseClockTime } from '../utils/decisionEngine';
 import { ChevronDown, ChevronRight, CheckCircle2, MessageSquare, CornerUpRight, PauseCircle } from 'lucide-react';
 
 export const DecisionsPage: React.FC = () => {
@@ -19,9 +19,13 @@ export const DecisionsPage: React.FC = () => {
   }));
   const passedCount = testResults.filter(t => t.result.passed).length;
 
+  const reopeningEstimate = parseClockTime(incident.reopeningEstimate);
+  const formatWait = (min?: number) =>
+    min === undefined ? '—' : `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`;
+
   const selectedZone = approachZones.find(z => z.id === selectedZoneId) || approachZones[0];
   const targetSeg = segments[selectedZone.segmentId] || segments['S-07'];
-  const activeDecision = evaluateApproachZoneDecision(selectedZone, targetSeg, segments, holdingPoints);
+  const activeDecision = evaluateApproachZoneDecision(selectedZone, targetSeg, segments, holdingPoints, { reopeningEstimate });
 
   const travellerTexts = {
     en: {
@@ -87,7 +91,7 @@ export const DecisionsPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
             {approachZones.map(zone => {
               const seg = segments[zone.segmentId] || segments['S-07'];
-              const res = evaluateApproachZoneDecision(zone, seg, segments, holdingPoints);
+              const res = evaluateApproachZoneDecision(zone, seg, segments, holdingPoints, { reopeningEstimate });
               const hp = res.holdingPoint;
               const isEligible = res.holdingEligibility.isEligible;
               const diversionText = res.diversionCheck.isOffered 
@@ -139,8 +143,8 @@ export const DecisionsPage: React.FC = () => {
                   <div className="flex items-center justify-between pt-1 text-xs">
                     <div className="text-[#1F2933]">
                       <span className="text-[#6B7280]">Expected wait: </span>
-                      <span className="font-mono font-medium">~{incident.reopeningEstimate || '4:00 PM'}</span>
-                      <EstTag className="ml-1" />
+                      <span className="font-mono font-medium">{formatWait(res.expectedWaitMinutes)}</span>
+                      {res.expectedWaitMinutes !== undefined && <EstTag className="ml-1" />}
                     </div>
 
                     <div className="font-mono text-[11px] text-[#6B7280]">
@@ -239,7 +243,7 @@ export const DecisionsPage: React.FC = () => {
             className="w-full px-4 py-3 flex items-center justify-between text-xs font-semibold text-[#1F2933] hover:bg-[#FAF8F3] transition-colors"
           >
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-[#2F6B45]" />
+              <CheckCircle2 className={`w-4 h-4 ${passedCount === testResults.length ? 'text-[#2F6B45]' : 'text-[#9B2C2C]'}`} />
               <span>Rule checks · {passedCount}/{testResults.length} passed</span>
             </div>
             {ruleChecksOpen ? <ChevronDown className="w-4 h-4 text-[#6B7280]" /> : <ChevronRight className="w-4 h-4 text-[#6B7280]" />}
@@ -255,8 +259,8 @@ export const DecisionsPage: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-mono text-[11px] text-[#6B7280]">{result.actualRuleId}</span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#DFF1E5] text-[#2F6B45]">
-                      PASS
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${result.passed ? 'bg-[#DFF1E5] text-[#2F6B45]' : 'bg-[#F8D7D7] text-[#9B2C2C]'}`}>
+                      {result.passed ? 'PASS' : 'FAIL'}
                     </span>
                   </div>
                 </div>

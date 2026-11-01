@@ -161,7 +161,7 @@ export const DemoProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             'Disang shale sheared slope (34°)',
             'Pre-failure movement detected by patrol'
           ],
-          windowClosing: true,
+          windowClosing: false,
           inputs: {
             ...prev['S-07'].inputs,
             rainfall24h: 88,
@@ -178,8 +178,8 @@ export const DemoProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         segmentId: 'S-07',
         ruleUsed: 'R-ORANGE-HOLD',
         beforeState: 'YELLOW',
-        afterState: 'ORANGE (Window closing)',
-        details: 'Threshold crossed (>140 mm 3d rain on 34° slope). Window closing active for control console.'
+        afterState: 'ORANGE',
+        details: 'Threshold crossed (>140 mm 3d rain on 34° slope).'
       });
     } else if (targetStep === 3) {
       setCurrentRole('control_officer');

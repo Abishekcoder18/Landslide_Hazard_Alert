@@ -104,7 +104,7 @@ export const DecisionChip: React.FC<{ decision: DecisionType; size?: 'sm' | 'md'
     case 'GO_CAUTION':
       return (
         <span className={`inline-flex items-center rounded-md border border-[#F3E29F] bg-[#FBF1CC] text-[#7A5B00] ${sizeClasses[size]}`}>
-          GO
+          GO · caution
         </span>
       );
     case 'HOLD':
