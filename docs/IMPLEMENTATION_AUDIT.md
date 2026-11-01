@@ -1,65 +1,99 @@
-# RESILION 2.0 — Implementation Audit (2026-11-01)
+# RESILION 2.0 — Implementation Audit vs PRD v1.0 (updated 2026-11-01)
 
-Scope: code on branch `claude/jolly-shannon-vm5au7` vs PRD v1.0 features (F1–F7) and business rules (BR-01–BR-12).
+Scope: UI framework + in-browser sample-data server on branch `claude/jolly-shannon-vm5au7`, checked against PRD v1.0 (AC-01–AC-25), MRD v1.0 and the Jira-ready backlog (EP-01–EP-06, ST-01–ST-25).
 
-> **Limitation:** the PRD `.docx` (with AC-01–AC-25 wording) is not in the repository, so this audit is keyed to F/BR IDs. Map each row to its AC-xx once the PRD text is available.
+**Status key:** **T** tested (automated test passes) · **U** shown working in the browser run (screenshot) · **P** partial · **B** needs backend / external dependency · **—** not started.
+Nothing here is a field result. All corridor values are **sample data**; map geometry is approximate.
 
-Status key: **T** = implemented & tested · **I** = implemented, not tested · **P** = partial · **—** = planned / not implemented.
+## Verification run
 
-## Verification run (evidence: `docs/evidence/verification-2026-11-01.txt`, page screenshots `docs/evidence/page-*.png`)
+| Check | Result | Evidence |
+|---|---|---|
+| `npm test` | 43 pass, 0 fail | `docs/evidence/verification-2026-11-01.txt` |
+| `npm run lint` (`tsc --noEmit`) | pass | same |
+| `npm run build` | pass (bundle > 500 kB warning) | same |
+| Browser run, 6 roles, full workflow (Playwright, Chromium) | 0 page errors, 0 console errors; no visible "demo" text | `docs/evidence/01…22-*.png` |
+| Map tiles / sample photos | blocked by this sandbox's network; render where internet is available | — |
 
-| Check | Result |
-|---|---|
-| `npm install` (clean checkout) | **Was failing** (ERESOLVE: `esbuild ^0.25` vs vite 8 peer `^0.27 \|\| ^0.28`). Fixed: `esbuild` → `^0.28.0`. |
-| `npx tsx --test src/utils/decisionEngine.test.ts` | 11 pass, 0 fail (was 3) |
-| `npm run lint` (`tsc --noEmit`) | pass |
-| `npm run build` | pass (warning: JS chunk 522 kB > 500 kB) |
-| Browser render, 5 pages (Playwright) | no page errors |
-| Visible text containing "demo" | 0 hits |
+## Acceptance criteria
 
-## Business rules
+| AC | Requirement | Status | Where | Notes |
+|---|---|---|---|---|
+| AC-01 | FR-01 ~1 km segments, stable IDs | **—** | `src/api/mock/seed.ts` | 12 approximate segments (8–12 km). Needs the team GeoPackage segmentation script (ST-01). |
+| AC-02 | FR-03/04/07 level + top reasons on map | **T U** | `domain/riskIndex.ts`, `CorridorPage`, `SegmentDrawer` | Risk Index is computed from inputs, not hard-coded. |
+| AC-03 | FR-05/06 recompute on new data / 6 h, configured thresholds | **T** | `riskIndex.test.ts`, `server.test.ts` | Thresholds/weights editable in Configuration. |
+| AC-04 | BR-05 warnings only raise | **T** | `riskIndex.test.ts`, `server.test.ts` | |
+| AC-05 | BR-06 missing/stale → No data | **T U** | `riskIndex.test.ts` | S-10 has missing rainfall → No data. |
+| AC-06 | BR-01 every row | **T U** | `decisionEngine.test.ts`, Decisions › Rule checks | 14 scripted scenarios (SM1 = 14/14). |
+| AC-07 | BR-02 one-way + Orange → HOLD | **T** | SC-13 | |
+| AC-08 | BR-03 diversion rule | **T U** | `checkDiversionSafety` | **P** for FR-10: diversion candidates are configured segment lists; OSRM not wired (**B**). |
+| AC-09 | BR-04 next eligible point back | **T** | `selectHoldingPoint` | Fallback chains editable in Configuration. |
+| AC-10 | FR-12/17 escalation, nothing auto-published | **T U** | `server.test.ts`, Approvals | Countdown shown; second approver locked until escalation. |
+| AC-11 | FR-13–15 expected wait = estimate − now, labelled | **T U** | `15-incident-log.png`, `16-…` | |
+| AC-12 | FR-16 window-closing, no hurry wording | **T** | engine + alert validator forbidden words | Flag shown to control-room roles only. |
+| AC-13 | FR-18 decision, inputs, time stored | **T U** | Records › Decision record | CSV export. |
+| AC-14 | FR-19/21 class, share blocked, confidence | **P U** | Reports › New report | Web upload works. Photo check is **simulated** for the two labelled sample photos; uploaded photos go to manual review until the Claude vision endpoint exists (**B**). |
+| AC-15 | FR-22 outside corridor / old → flagged | **T** | `reportChecks.test.ts` | |
+| AC-16 | FR-22 grouping into one incident | **T U** | `reportChecks.test.ts` | Confirming one report confirms its group and links all to one incident. |
+| AC-17 | FR-23–25 confirm → BLOCKED + re-evaluate; reject → no change | **T U** | `server.test.ts`, `06-…` | |
+| AC-18 | BR-07 AI alone never changes state | **T** | `server.test.ts` | AI writes an audit "flag" only. |
+| AC-19 | BR-10 injected note has no effect | **T** | `server.test.ts` | Re-test once a real model reads reports (**B**). |
+| AC-20 | FR-26 AI unavailable → manual review | **T U** | `server.test.ts`, Configuration toggle | |
+| AC-21 | FR-27/28/30 alerts match or are blocked | **T U** | `alerts.test.ts`, `11-alert-blocked.png` | Validator + templates done. LLM fill/translation is backend (**B**); hi/as/bn templates need native review. |
+| AC-22 | FR-31 CAP Severe/Immediate/certainty/area | **T U** | `alerts.test.ts`, `12-cap-export.png` | |
+| AC-23 | FR-33 patrol refused | **T U** | `permissions.test.ts`, `server.test.ts` | Real authentication is backend (**B**). |
+| AC-24 | FR-08 one zone per direction; decision inside geofence | **P T** | seed + `server.test.ts` | One zone per direction per risky segment; geofence used as map ring and CAP area. No vehicle location by design. |
+| AC-25 | FR-20 field-app channel | **—** | — | Not Verified (field-app photo upload unconfirmed). |
 
-| Rule | Status | Where | Notes |
+**Summary:** 20 of 25 tested; 3 partial (AC-08 OSRM, AC-14 real photo AI, AC-24 geofence use); 2 not started (AC-01 needs data, AC-25 field app).
+
+## Stories (backlog ST-01–ST-25)
+
+| Story | Status | Story | Status |
 |---|---|---|---|
-| BR-01 decision table | **T** | `src/utils/decisionEngine.ts` `evaluateApproachZoneDecision` | `closeRecommended` flag added (BLOCKED/Red). Heavy-only: zone cards use `vehicleType: 'all'` → shows light-vehicle result; heavy HOLD only visible when evaluated with `heavy`. **Gap: card should show both classes.** |
-| BR-02 most restrictive wins | **T** (fixed) | same | **Was violated**: ORANGE + one-way / heavy-only / UNKNOWN returned GO_CAUTION. ORANGE now checked before restrictions. |
-| BR-03 diversion safety | **T** | `checkDiversionSafety` | Only the first diversion candidate per zone is evaluated. |
-| BR-04 holding-point eligibility + fallback | **T** (fixed) | `selectHoldingPoint`, `ApproachZone.fallbackHoldingPointIds`, `src/data/mockData.ts` | **Was violated**: ineligible point still used. Now Haflong → Lumding. AZ-07S (Silchar side) has no fallback — open item (Silchar-side town). |
-| BR-05 warnings only raise | **—** | `DemoContext.updateSegmentRainfall` | No Risk Index computation; rainfall setter can **lower** risk to Green ignoring susceptibility/warnings. |
-| BR-06 missing/stale → No data | **P** | engine treats NO_DATA/UNKNOWN as caution (tested) | No staleness detection; `freshness` is a static string. |
-| BR-07 only officer-confirmed report changes state | **I** | `DemoContext.confirmReport` | AI never changes state. But confirm forces `S-07` BLOCKED if `blockagePercent > 50` regardless of report segment logic (hard-coded). |
-| BR-08 officer approval, escalation | **P** | `src/pages/ApprovalsPage.tsx` | Approve button not role-gated; second approver not used; escalation timer reaches 00:00 and **nothing happens**. |
-| BR-09 alert validator blocks mismatches | **—** | `ApprovalsPage` | "Places ✓ Times ✓ Decision ✓" is **static markup**; drafts are fixed strings in `mockData.ts`. |
-| BR-10 report text is data | **P** | reports rendered as text only | No LLM consumes report text yet, so nothing to inject into; needs test once AI endpoint exists. |
-| BR-11 window-closing flag, no GO NOW | **T** (fixed) | engine + `DemoContext` step 2 | **Was violated**: step 2 set the flag on an Orange segment. Now Yellow-only. Test asserts no "go now/hurry" wording. |
-| BR-12 6-hour validity | **P** | `Segment.validUntil` | Static string; no expiry → No data. |
-| Expected wait = est. reopening − now | **T** (fixed) | engine `expectedWaitMinutes`, `DecisionsPage` | **Was** hard-coded 180/90/20 min and the UI showed a clock time on every card. Now HOLD-only duration, labelled est. |
-| No vehicle tracking | **I** | — | No location tracking code present. |
+| ST-01 segmentation | — (data) | ST-14 field app | — (Not Verified) |
+| ST-02 inputs | P (sample inputs; feeds **B**) | ST-15 auto checks | T |
+| ST-03 risk map + reasons | T U | ST-16 queue confirm/reject | T U |
+| ST-04 validity + config | T U | ST-17 AI outage | T U |
+| ST-05 approach zones | T U (P geofence) | ST-18 validated alerts | P (validator T; LLM **B**) |
+| ST-06 decision table | T U | ST-19 Dimasa | — (translator pending; UI marks pending) |
+| ST-07 diversion | T (OSRM **B**) | ST-20 CAP export | T U |
+| ST-08 holding point | T U | ST-21 login | U (role sign-in; real auth **B**) |
+| ST-09 CLOSE + escalation | T U | ST-22 permissions | T U |
+| ST-10 incident log + estimate | T U | ST-23 audit log | U (append-only in UI/mock) |
+| ST-11 window closing | T | ST-24 offline cache | — (Could, not in scope) |
+| ST-12 equipment | U | ST-25 SMS | — (Could, not in scope) |
+| ST-13 web upload + AI | P (simulated AI) | | |
 
-## Features
+## UI evidence sheet mapping
 
-| Feature | Status | Where | Gaps |
-|---|---|---|---|
-| F1 Segment Risk Map | **P** | `CorridorPage`, `CorridorMap`, `SegmentDrawer` | Risk levels are sample values; Settings weights (GSI/rainfall/slope/history) are **not used** by any computation; geometry approximate; OSM tiles fail offline (schematic fallback works). |
-| F2 Safe Passage & Closure Engine | **P** | `decisionEngine.ts`, `DecisionsPage`, `IncidentsPage` | Engine tested. Traveller message & SMS reply are **hard-coded** "HOLD at Haflong… No safe diversion" — not driven by the engine. Officer "clear passage" for Orange not implemented. Decision record = audit log entries only. |
-| F3 Verified Ground Reports | **P** | `ReportsPage`, `DemoContext` | AI result simulated (fixed `Debris / 100% / 0.91`); "AI outage" toggle does not affect submission; automatic checks hard-coded `true`; no file upload (URL only). |
-| F4 Multilingual alerts + validator + CAP | **P** | `ApprovalsPage`, `mockData.INITIAL_APPROVAL` | Templates static; validator static (BR-09 —); CAP is a fixed XML string. CAP `<instruction>` says *Northbound hold at Silchar / Southbound at Haflong* — check against zones (AZ-07N Southbound→Haflong ✓, AZ-07S Northbound→Silchar ✓). CAP `<sender>` uses a `.gov.in` address — **change to a non-government placeholder** to avoid implying adoption. |
-| F5 Access control & audit | **P** | `Sidebar` role menu, `IncidentsPage` History | Role switch has no effect on permissions; audit log in memory only. |
-| F6 Offline cache / SMS fallback | **—** | SMS shown as static mock-up | — |
-| F7 Equipment tracking | **I** | `IncidentsPage` crew assignment | Not tested. |
-
-## Success metrics
-
-| Metric | Status |
+| Screen (backlog) | Screenshot |
 |---|---|
-| SM1 decision correctness | 12/12 scripted scenarios + 8 rule tests pass. Rule-check panel previously showed **PASS unconditionally**; now shows real result. |
-| SM2 alert safety | Not measurable — validator not implemented (BR-09). |
-| SM3 report-to-decision time | Not measured yet. |
+| Corridor map | `02-corridor.png` |
+| Segment detail panel | `03-segment-drawer.png` |
+| Approach-zone overlay | `03-segment-drawer.png` (dashed rings), `20-config-zones.png` |
+| Decision panel | `04-…`, `06-decisions-after-confirm.png`, `16-decisions-expected-wait.png` |
+| Closure approval view | `09-closure-approval.png` |
+| Incident and clearance log | `15-incident-log.png` |
+| Window-closing flag | `23-window-closing.png` (S-06 Yellow + IMD Orange set by administrator) |
+| Report upload page | `14-report-upload.png` |
+| Officer report queue | `05-reports-queue.png` |
+| Alert approval view | `10-alert-approval.png`, `11-alert-blocked.png`, `12-cap-export.png` |
+| Login screen | `01-login.png` |
 
-## Recommended next steps (priority)
+## Contradictions / decisions to note
 
-1. BR-09 validator + CAP built from decision fields (step 4 of plan) — biggest claim risk today.
-2. Drive traveller message / SMS from `evaluateApproachZoneDecision`.
-3. Escalation on timer expiry + role-gated approve (BR-08).
-4. Rule-based Risk Index using the Settings weights, warnings-only-raise (BR-05), staleness → No data (BR-06/12).
-5. Real NH-27 segments (needs owner's GeoPackage — not in repo).
+- Place names stay in Roman script inside hi/as/bn alerts so the validator can match them exactly — **assumption**, confirm with district.
+- IMD "heavy-rainfall warning" for BR-11 is taken as IMD **Orange or Red** — **assumption**.
+- BR-05 floors: IMD Yellow/Orange → at least Yellow, IMD Red → at least Orange, GSI bulletin → at least Orange — **assumption**. Chosen so BR-11 (Yellow + IMD heavy-rainfall warning) can occur; with "warning colour = minimum level" the window-closing flag could never fire.
+- Fallen tree / water reports go to the officer queue (PRD names only debris/crack for the queue and clear/not-relevant for log-only).
+- SM3 in mock mode measures only engine time (~1 ms); with the backend it will include the AI photo-check time.
+- Holding-point names and Silchar-side town remain **pending verification** (marked "Provisional").
+
+## Next (backend)
+
+1. FastAPI service implementing `docs/API_CONTRACT.md` over PostGIS.
+2. Segmentation script from the team GeoPackage (AC-01).
+3. Claude Sonnet 5.5 photo-check endpoint (AC-14, re-run AC-19).
+4. LLM alert fill/translation feeding `validateAlert` (AC-21).
+5. OSRM diversion candidates (AC-08 / FR-10).

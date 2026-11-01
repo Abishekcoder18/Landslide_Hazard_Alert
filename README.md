@@ -1,20 +1,29 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# RESILION 2.0
 
-# Run and deploy your AI Studio app
+PS13 — Landslide and Hazard Alert Management for Hill Roads. Initial corridor: NH-27 within Dima Hasao district, Assam.
 
-This contains everything you need to run your app locally.
+Road-level decision layer: segment Risk Index (rules), approach-zone decisions (GO / HOLD at a named Safe Holding Point / DIVERT on a risk-checked route), officer-confirmed field reports, CLOSE recommendation with escalation, reopening estimate, validated multilingual alerts and CAP export. Requirements: `docs/RESILION_2.0_PRD_v1.0.docx`.
 
-View your app in AI Studio: https://ai.studio/apps/b3a2373e-8b2a-40b9-bb0d-9d8ca5421ad5
+## Run
 
-## Run Locally
+```bash
+npm install
+npm run dev        # http://localhost:3000 — sample-data mode
+npm test           # domain rules + workflow tests
+npm run lint
+npm run build
+```
 
-**Prerequisites:**  Node.js
+Sign in with any user ID and a role. Without `VITE_API_URL` the app runs on an in-browser sample-data server (`src/api/mock/server.ts`); set `VITE_API_URL` to use the FastAPI backend (`docs/API_CONTRACT.md`).
 
+## Layout
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+| Path | Contents |
+|---|---|
+| `src/domain/` | Pure rules: decision engine, Risk Index, report checks, alerts + validator + CAP, permissions (with tests) |
+| `src/api/` | `ResilionApi` contract, HTTP client, sample-data server |
+| `src/pages/` | Corridor, Reports, Decisions, Approvals, Incidents, Records, Configuration, Login |
+| `docs/IMPLEMENTATION_AUDIT.md` | Status against AC-01–AC-25 and ST-01–ST-25 |
+| `docs/evidence/` | Test/build output and screenshots |
+
+All corridor values are sample data; map geometry is approximate.

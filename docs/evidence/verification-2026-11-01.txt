@@ -1,34 +1,98 @@
-$ npx tsx --test src/utils/decisionEngine.test.ts
-# Subtest: checkDiversionSafety rejects routes with NO_DATA, BLOCKED, or elevated risk
-ok 1 - checkDiversionSafety rejects routes with NO_DATA, BLOCKED, or elevated risk
-# Subtest: checkHoldingPointEligibility validates host segment OPEN and Green/Yellow
-ok 2 - checkHoldingPointEligibility validates host segment OPEN and Green/Yellow
-# Subtest: run all 12 scripted test scenarios through decisionEngine
-ok 3 - run all 12 scripted test scenarios through decisionEngine
-# Subtest: BR-02: Orange risk wins over one-way / heavy restriction / unknown state
-ok 4 - BR-02: Orange risk wins over one-way / heavy restriction / unknown state
+$ npm test
+# Subtest: Seed: S-07 computed Orange; S-10 No data; zones one per direction (AC-24)
+ok 1 - Seed: S-07 computed Orange; S-10 No data; zones one per direction (AC-24)
+# Subtest: AC-18: AI debris classification alone never changes segment state
+ok 2 - AC-18: AI debris classification alone never changes segment state
+# Subtest: AC-19: injected instruction in a report note has no effect
+ok 3 - AC-19: injected instruction in a report note has no effect
+# Subtest: AC-17 / AC-13 / SM3: officer confirm -> BLOCKED, zones re-evaluated, decision recorded with timing
+ok 4 - AC-17 / AC-13 / SM3: officer confirm -> BLOCKED, zones re-evaluated, decision recorded with timing
+# Subtest: AC-17: rejecting a report changes no state
+ok 5 - AC-17: rejecting a report changes no state
+# Subtest: AC-20: AI unavailable -> manual review queue; system keeps running
+ok 6 - AC-20: AI unavailable -> manual review queue; system keeps running
+# Subtest: AC-10: no officer action -> escalates to second approver; nothing auto-published
+ok 7 - AC-10: no officer action -> escalates to second approver; nothing auto-published
+# Subtest: AC-23: patrol cannot approve a closure; refusal is logged
+ok 8 - AC-23: patrol cannot approve a closure; refusal is logged
+# Subtest: Full flow: closure -> alert (AC-21) -> CAP (AC-22) -> estimate (AC-11) -> reopening
+ok 9 - Full flow: closure -> alert (AC-21) -> CAP (AC-22) -> estimate (AC-11) -> reopening
+# Subtest: BR-01: officer may clear passage for Orange; logged; patrol may not
+ok 10 - BR-01: officer may clear passage for Orange; logged; patrol may not
+# Subtest: AC-03 / BR-12: after validity expires with no new input, level is recomputed (stale -> No data)
+ok 11 - AC-03 / BR-12: after validity expires with no new input, level is recomputed (stale -> No data)
+# Subtest: AC-04: IMD warning ingested never lowers a level
+ok 12 - AC-04: IMD warning ingested never lowers a level
+# Subtest: AC-12 end-to-end: Yellow segment + IMD Orange warning -> window-closing flag; level stays Yellow; no hurry text
+ok 13 - AC-12 end-to-end: Yellow segment + IMD Orange warning -> window-closing flag; level stays Yellow; no hurry text
+# Subtest: AC-21: template alerts in all four languages match source fields
+ok 14 - AC-21: template alerts in all four languages match source fields
+# Subtest: AC-21 / BR-09: mismatching place, time or decision is blocked; officer receives the template
+ok 15 - AC-21 / BR-09: mismatching place, time or decision is blocked; officer receives the template
+# Subtest: BR-09: officer edit that keeps facts passes; one that changes facts is blocked
+ok 16 - BR-09: officer edit that keeps facts passes; one that changes facts is blocked
+# Subtest: AC-22: HOLD alert CAP carries Severe, Immediate, certainty per mapping, approach-zone area
+ok 17 - AC-22: HOLD alert CAP carries Severe, Immediate, certainty per mapping, approach-zone area
+# Subtest: BR-03 / AC-08: diversion rejected when any segment is No data, BLOCKED, Orange or Red
+ok 18 - BR-03 / AC-08: diversion rejected when any segment is No data, BLOCKED, Orange or Red
+# Subtest: BR-04: holding point eligible only while its segment is OPEN and Green/Yellow
+ok 19 - BR-04: holding point eligible only while its segment is OPEN and Green/Yellow
+# Subtest: SM1: every scripted scenario returns the decision specified by the rules
+ok 20 - SM1: every scripted scenario returns the decision specified by the rules
+# Subtest: BR-02 / AC-07: Orange risk wins over one-way / heavy restriction / unknown state
+ok 21 - BR-02 / AC-07: Orange risk wins over one-way / heavy restriction / unknown state
 # Subtest: BR-01: BLOCKED or Red recommends CLOSE; others do not
-ok 5 - BR-01: BLOCKED or Red recommends CLOSE; others do not
-# Subtest: BR-04: ineligible nearest holding point falls back to next point back
-ok 6 - BR-04: ineligible nearest holding point falls back to next point back
+ok 22 - BR-01: BLOCKED or Red recommends CLOSE; others do not
+# Subtest: BR-01: officer-cleared passage applies to Orange only
+ok 23 - BR-01: officer-cleared passage applies to Orange only
+# Subtest: BR-01: heavy-only restriction holds heavy vehicles, others GO with caution
+ok 24 - BR-01: heavy-only restriction holds heavy vehicles, others GO with caution
+# Subtest: BR-04 / AC-09: ineligible nearest holding point falls back to next point back
+ok 25 - BR-04 / AC-09: ineligible nearest holding point falls back to next point back
 # Subtest: BR-04: no eligible holding point -> HOLD with no point named
-ok 7 - BR-04: no eligible holding point -> HOLD with no point named
-# Subtest: Expected wait = reopening estimate - now, only for HOLD; no hard-coded waits
-ok 8 - Expected wait = reopening estimate - now, only for HOLD; no hard-coded waits
+ok 26 - BR-04: no eligible holding point -> HOLD with no point named
+# Subtest: AC-11: expected wait = reopening estimate - now, HOLD only
+ok 27 - AC-11: expected wait = reopening estimate - now, HOLD only
 # Subtest: BR-06: NO_DATA / UNKNOWN never yields GO
-ok 9 - BR-06: NO_DATA / UNKNOWN never yields GO
-# Subtest: BR-11: window-closing only on Yellow + IMD heavy warning; no hurry wording
-ok 10 - BR-11: window-closing only on Yellow + IMD heavy warning; no hurry wording
+ok 28 - BR-06: NO_DATA / UNKNOWN never yields GO
+# Subtest: BR-11 / AC-12: window-closing only on Yellow + IMD heavy warning; no hurry wording
+ok 29 - BR-11 / AC-12: window-closing only on Yellow + IMD heavy warning; no hurry wording
 # Subtest: parseClockTime parses "4:00 PM" on the reference day
-ok 11 - parseClockTime parses "4:00 PM" on the reference day
-# tests 11
+ok 30 - parseClockTime parses "4:00 PM" on the reference day
+# Subtest: AC-23: patrol cannot approve a closure
+ok 31 - AC-23: patrol cannot approve a closure
+# Subtest: PRD §8 matrix spot checks
+ok 32 - PRD §8 matrix spot checks
+# Subtest: Second approver decides only on escalation
+ok 33 - Second approver decides only on escalation
+# Subtest: AC-15: report outside the corridor is flagged, not routed as a new incident
+ok 34 - AC-15: report outside the corridor is flagged, not routed as a new incident
+# Subtest: AC-15: report older than the configured limit is flagged
+ok 35 - AC-15: report older than the configured limit is flagged
+# Subtest: AC-16: reports of one slide within distance and window share one group
+ok 36 - AC-16: reports of one slide within distance and window share one group
+# Subtest: AC-20 / FR-26: AI unavailable -> manual review
+ok 37 - AC-20 / FR-26: AI unavailable -> manual review
+# Subtest: FR-23: debris/crack to officer queue; clear/not relevant logged only; queue by confidence
+ok 38 - FR-23: debris/crack to officer queue; clear/not relevant logged only; queue by confidence
+# Subtest: AC-02: inputs produce one of Green/Yellow/Orange/Red with top reasons
+ok 39 - AC-02: inputs produce one of Green/Yellow/Orange/Red with top reasons
+# Subtest: AC-03: recomputed level uses configured thresholds; valid for configured hours
+ok 40 - AC-03: recomputed level uses configured thresholds; valid for configured hours
+# Subtest: AC-04 / BR-05: IMD warning or GSI bulletin never lowers a level, may raise it
+ok 41 - AC-04 / BR-05: IMD warning or GSI bulletin never lowers a level, may raise it
+# Subtest: AC-05 / BR-06: missing or stale input -> No data, never Green
+ok 42 - AC-05 / BR-06: missing or stale input -> No data, never Green
+# Subtest: BR-12: an expired Risk Level displays as No data
+ok 43 - BR-12: an expired Risk Level displays as No data
+# tests 43
 # suites 0
-# pass 11
+# pass 43
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 162.719121
+# duration_ms 406.005674
 
 $ npm run lint
 
@@ -46,16 +110,18 @@ $ npm run build
 Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
 vite v8.3.5 building client environment for production...
 transforming...
-✓ 1683 modules transformed.
+✓ 1701 modules transformed.
 rendering chunks...
 computing gzip size...
-dist/index.html                   1.56 kB │ gzip:   0.73 kB
-dist/assets/index-h83-uzo1.css   26.23 kB │ gzip:   5.92 kB
-dist/assets/index-BjNX9F1J.js   521.71 kB │ gzip: 155.31 kB
+dist/index.html                   1.35 kB │ gzip:   0.62 kB
+dist/assets/index-C5OG63ke.css   43.80 kB │ gzip:  12.44 kB
+dist/assets/index-DtX00NfO.js   550.78 kB │ gzip: 163.04 kB
 
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.23s
+✓ built in 1.24s
+
+Browser run (Playwright, Chromium, 6 roles): 0 page errors, 0 console errors, no visible 'demo' text; screenshots docs/evidence/01-23
