@@ -1,0 +1,61 @@
+$ npx tsx --test src/utils/decisionEngine.test.ts
+# Subtest: checkDiversionSafety rejects routes with NO_DATA, BLOCKED, or elevated risk
+ok 1 - checkDiversionSafety rejects routes with NO_DATA, BLOCKED, or elevated risk
+# Subtest: checkHoldingPointEligibility validates host segment OPEN and Green/Yellow
+ok 2 - checkHoldingPointEligibility validates host segment OPEN and Green/Yellow
+# Subtest: run all 12 scripted test scenarios through decisionEngine
+ok 3 - run all 12 scripted test scenarios through decisionEngine
+# Subtest: BR-02: Orange risk wins over one-way / heavy restriction / unknown state
+ok 4 - BR-02: Orange risk wins over one-way / heavy restriction / unknown state
+# Subtest: BR-01: BLOCKED or Red recommends CLOSE; others do not
+ok 5 - BR-01: BLOCKED or Red recommends CLOSE; others do not
+# Subtest: BR-04: ineligible nearest holding point falls back to next point back
+ok 6 - BR-04: ineligible nearest holding point falls back to next point back
+# Subtest: BR-04: no eligible holding point -> HOLD with no point named
+ok 7 - BR-04: no eligible holding point -> HOLD with no point named
+# Subtest: Expected wait = reopening estimate - now, only for HOLD; no hard-coded waits
+ok 8 - Expected wait = reopening estimate - now, only for HOLD; no hard-coded waits
+# Subtest: BR-06: NO_DATA / UNKNOWN never yields GO
+ok 9 - BR-06: NO_DATA / UNKNOWN never yields GO
+# Subtest: BR-11: window-closing only on Yellow + IMD heavy warning; no hurry wording
+ok 10 - BR-11: window-closing only on Yellow + IMD heavy warning; no hurry wording
+# Subtest: parseClockTime parses "4:00 PM" on the reference day
+ok 11 - parseClockTime parses "4:00 PM" on the reference day
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 162.719121
+
+$ npm run lint
+
+> react-example@0.0.0 lint
+> tsc --noEmit
+
+
+$ npm run build
+
+> react-example@0.0.0 build
+> vite build
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vite.config.ts:11:27). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 1683 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   1.56 kB │ gzip:   0.73 kB
+dist/assets/index-h83-uzo1.css   26.23 kB │ gzip:   5.92 kB
+dist/assets/index-BjNX9F1J.js   521.71 kB │ gzip: 155.31 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.23s
