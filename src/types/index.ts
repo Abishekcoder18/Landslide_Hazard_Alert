@@ -37,6 +37,8 @@ export interface SegmentInputs {
   rainfall7d: number | null;
   pastIncidents: number | null;
   imdWarning: ImdWarning;
+  /** Where the IMD warning came from: "SACHET <alert id> · <source> · until <time>", or "Officer". */
+  imdWarningSource?: string;
   gsiBulletin: boolean;
   updatedAt: string;
   /** Inputs are scenario values until real feeds are wired. */

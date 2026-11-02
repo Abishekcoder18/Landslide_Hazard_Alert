@@ -21,6 +21,9 @@ class Settings:
     corridor_source: str = os.getenv("CORRIDOR_SOURCE", "auto")
     # IMD rainfall date used for the real corridor's rainfall inputs (historical scenario, shown with its date).
     scenario_date: str = os.getenv("SCENARIO_DATE", "2022-05-10")
+    # Background feeds (SACHET IMD warnings, live rainfall). Off unless FEEDS_ENABLED=true (tests never poll).
+    feeds_enabled: bool = os.getenv("FEEDS_ENABLED", "false").lower() == "true"
+    sachet_minutes: float = float(os.getenv("SACHET_POLL_MINUTES", "30"))
     anthropic_api_key: str | None = os.getenv("ANTHROPIC_API_KEY") or None
     ai_model: str = os.getenv("AI_MODEL", "claude-sonnet-5-5")
     secret_key: str = os.getenv("SECRET_KEY") or secrets.token_hex(32)

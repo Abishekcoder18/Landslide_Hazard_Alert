@@ -2,6 +2,7 @@
 Run: uvicorn app.main:app --reload --port 8000  (from backend/)"""
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import logging
@@ -18,7 +19,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import auth, corridor_data
+from . import auth, corridor_data, feeds
 from .ai import AIUnavailable, ClaudeAI, Image
 from .domain.alerts import render_template
 from .seed import SAMPLE_PHOTOS
@@ -102,7 +103,12 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
     async def lifespan(_: FastAPI):
         seed_if_needed()
         log.info("AI photo check / alert writer: %s (%s)", "enabled" if ai.enabled else "disabled — no ANTHROPIC_API_KEY", ai.model)
+        tasks = []
+        if cfg.feeds_enabled:
+            tasks.append(asyncio.create_task(feeds.every(cfg.sachet_minutes, "sachet", feeds.sachet_job(run, clock))))
         yield
+        for t in tasks:
+            t.cancel()
 
     app = FastAPI(title="RESILION 2.0 API", version="1.0", lifespan=lifespan)
     app.add_middleware(CORSMiddleware, allow_origins=cfg.cors_origins, allow_methods=["*"], allow_headers=["*"])

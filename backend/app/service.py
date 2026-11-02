@@ -144,6 +144,29 @@ class Workflow:
                 seg["inputs"] = {**seg["inputs"], **{k: fresh[sid].get(k) for k in FEED_FIELDS}, "updatedAt": self.iso(), "sample": False}
         return True
 
+    def apply_imd_feed(self, level: str, label: str) -> bool:
+        """IMD warning from NDMA SACHET (app/sachet.py) -> the existing `imdWarning` input of every segment.
+        The feed may raise an officer-set warning but never lowers it; it only clears warnings it set itself."""
+        from .sachet import RANK
+        if not self.real:
+            return False
+        changed = []
+        for sid, seg in self.s["segments"].items():
+            inp = seg["inputs"]
+            cur, src = inp.get("imdWarning", "NONE"), inp.get("imdWarningSource") or ""
+            feed_owned = src == "" or src.startswith("SACHET")
+            if (feed_owned and (cur != level or src != label)) or RANK[level] > RANK.get(cur, 0):
+                if cur != level:
+                    changed.append(sid)
+                inp["imdWarning"], inp["imdWarningSource"] = level, label
+        if changed:
+            now = self.now()
+            for sid in changed:
+                self.s["segments"][sid] = apply_risk(self.s["segments"][sid], self.s["config"], now)
+            self.audit("Input feed", "system", "IMD warning updated", f"{level} · {label} · {len(changed)} segments")
+            self.recompute("IMD warning (SACHET)")
+        return bool(changed)
+
     def seed_initial(self) -> None:
         now = self.now()
         if self.real:
@@ -592,6 +615,8 @@ class Workflow:
         clean = {k: v for k, v in patch.items() if k in allowed and seg["inputs"].get(k) != v}
         data_edit = bool(set(clean) - {"imdWarning", "gsiBulletin"})
         inputs = {**seg["inputs"], **clean, "updatedAt": self.iso()}
+        if "imdWarning" in clean:
+            inputs["imdWarningSource"] = "Officer"  # the SACHET feed never lowers an officer-set warning
         if "susceptibility" in clean:
             inputs["susceptibilityScore"] = None  # a manually set category replaces the model score
         if data_edit or not self.real:

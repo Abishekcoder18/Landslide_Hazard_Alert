@@ -98,7 +98,12 @@ export const SegmentDrawer: React.FC<{ segmentId: string | null; onClose: () => 
               </Row>
               {i.rainfallDate && <Row label="Rainfall date"><span className="font-mono">IMD · {fmtDay(i.rainfallDate)}</span></Row>}
               <Row label={i.sources?.history ? 'Past landslides ≤ 500 m' : 'Past incidents'}>{v(i.pastIncidents)}</Row>
-              <Row label="IMD warning">{i.imdWarning === 'NONE' ? 'None' : i.imdWarning}</Row>
+              <Row label="IMD warning">
+                <span className="inline-flex flex-col items-end">
+                  <span>{i.imdWarning === 'NONE' ? 'None' : i.imdWarning}</span>
+                  {i.imdWarningSource && <span className="text-[11px] text-[#6B7280] font-mono">{i.imdWarningSource}</span>}
+                </span>
+              </Row>
               <Row label="GSI bulletin">{i.gsiBulletin ? 'Yes' : 'None'}</Row>
               <Row label="Updated">{fmtAgo(i.updatedAt, now)}</Row>
             </div>

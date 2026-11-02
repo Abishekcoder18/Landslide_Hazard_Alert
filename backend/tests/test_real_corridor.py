@@ -217,3 +217,26 @@ def test_dry_date_no_zone_on_hold(env):
     assert max(x["inputs"]["rainfall7d"] for x in s["segments"]) < 5  # dry week in the IMD data
     holds = [d["zoneId"] for d in s["decisions"] if d["result"]["decision"] == "HOLD" or (d.get("heavyResult") or {}).get("decision") == "HOLD"]
     assert holds == []
+
+def test_sachet_warning_raises_never_lowers_officer(env):
+    """Phase 6: an IMD colour from SACHET goes into the existing imdWarning input (BR-05 raise-only, BR-11)."""
+    client, _, clock, store = env
+    from app.service import Workflow
+    off = login(client, "officer")
+    before = {x["id"]: x["riskLevel"] for x in snap(client, off)["segments"]}
+    with store.unit_of_work() as (conn, state):
+        assert Workflow(state, lambda: clock["now"]).apply_imd_feed("ORANGE", "SACHET TEST-1 · IMD Guwahati · until 03 Nov 12:00")
+    s = snap(client, off)
+    order = ["GREEN", "YELLOW", "ORANGE", "RED"]
+    assert all(order.index(x["riskLevel"]) >= order.index(before[x["id"]]) for x in s["segments"])  # never lowered
+    assert all(x["inputs"]["imdWarning"] == "ORANGE" and x["inputs"]["imdWarningSource"].startswith("SACHET TEST-1") for x in s["segments"])
+    assert any(d["result"]["windowClosing"] for d in s["decisions"])  # BR-11: Yellow + IMD Orange
+    # Officer sets RED on one segment; the feed later reports no alert -> officer value stays, feed-owned ones clear.
+    client.patch("/api/segments/NH27-DH-108/inputs", json={"imdWarning": "RED"}, headers=login(client, "admin"))
+    with store.unit_of_work() as (conn, state):
+        Workflow(state, lambda: clock["now"]).apply_imd_feed("NONE", "SACHET · no active IMD alert for Dima Hasao")
+    s = snap(client, off)
+    by = {x["id"]: x["inputs"] for x in s["segments"]}
+    assert by["NH27-DH-108"]["imdWarning"] == "RED" and by["NH27-DH-108"]["imdWarningSource"] == "Officer"
+    assert by["NH27-DH-001"]["imdWarning"] == "NONE"
+    assert any(a["action"] == "IMD warning updated" for a in s["audit"])
