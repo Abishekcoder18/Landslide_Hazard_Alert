@@ -2,7 +2,7 @@ import { Config } from '../types';
 
 /** Default configuration (NFR-09). Values are starting assumptions to be calibrated; the administrator edits them. */
 export const DEFAULT_CONFIG: Config = {
-  weights: { susceptibility: 35, rainfall: 30, slope: 20, history: 15 },
+  weights: { susceptibility: 25, rainfall: 45, slope: 15, history: 15 },
   thresholds: { yellow: 30, orange: 55, red: 75 },
   validityHours: 6,
   staleInputHours: 6,

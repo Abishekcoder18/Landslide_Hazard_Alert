@@ -13,6 +13,7 @@ from typing import Any, Callable, Literal, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -105,6 +106,8 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
 
     app = FastAPI(title="RESILION 2.0 API", version="1.0", lifespan=lifespan)
     app.add_middleware(CORSMiddleware, allow_origins=cfg.cors_origins, allow_methods=["*"], allow_headers=["*"])
+    # The real-corridor snapshot (137 segments, 274 zones) is ~570 KB of JSON, polled every 5 s; gzip makes it ~50 KB.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.mount("/uploads", StaticFiles(directory=str(cfg.upload_dir)), name="uploads")
 
     @app.exception_handler(ApiError)

@@ -166,3 +166,18 @@ test('AC-12 end-to-end: Yellow segment + IMD Orange warning -> window-closing fl
   assert.equal(d.result.decision, 'GO_CAUTION');
   assert.doesNotMatch(d.result.travellerAdvisory, /hurry|go now|quickly/i);
 });
+
+test('FR-12: a CLOSE recommendation the rules no longer support is withdrawn, never approved by the engine', () => {
+  const { server, as } = setup();
+  const admin = as('admin');
+  server.updateSegmentInputs(admin, 'S-07', { rainfall24h: 200, rainfall3d: 400, rainfall7d: 600, slopeDeg: 45, pastIncidents: 5, susceptibility: 'Very High' });
+  const apr = server.snapshot().approvals.find(a => a.kind === 'closure' && a.segmentId === 'S-07' && a.status === 'pending');
+  assert.ok(apr, 'Red segment raises a CLOSE recommendation');
+  server.updateSegmentInputs(admin, 'S-07', { rainfall24h: 0, rainfall3d: 0, rainfall7d: 0, slopeDeg: 5, pastIncidents: 0, susceptibility: 'Low' });
+  const snap = server.snapshot();
+  const after = snap.approvals.find(a => a.id === apr!.id)!;
+  assert.equal(after.status, 'withdrawn');
+  assert.equal(after.decidedBy, 'Decision engine');
+  assert.ok(snap.audit.some(e => e.action === 'CLOSE recommendation withdrawn' && e.entity === apr!.id));
+  assert.throws(() => server.decideApproval(as('officer'), apr!.id, true));
+});

@@ -188,34 +188,35 @@ def holding_points(segs: list[dict], line: LineString, pl: gpd.GeoDataFrame) -> 
     ]
 
 
-def zones(segs: list[dict], hps: list[dict], line: LineString, counts: dict[str, int], min_events: int) -> list[dict]:
-    """One approach zone per direction for each risky segment (>= min_events past landslides within 500 m).
-    Southbound traffic comes from Lumding (km 0), northbound from the Silchar side.
-    Holding point = nearest point behind the zone; fallbacks = further back (BR-04)."""
+def assign_holding_points(segs: list[dict], hps: list[dict], seg_index: int, direction: str) -> tuple[str, list[str]]:
+    """BR-04 chain for a zone: holding points at or behind the target segment (towards where traffic comes from),
+    nearest first; the rest are fallbacks further back. Southbound traffic comes from Lumding (km 0), northbound
+    from the Silchar side. Points are ordered by their own segment's chainage (ties: by id, deterministic)."""
     pos = {s["id"]: i for i, s in enumerate(segs)}
-    haf_i = pos[hps[1]["segmentId"]]
+    at = [(pos[h["segmentId"]], h["id"]) for h in hps]
+    if direction == "Southbound":
+        chain = [hid for p, hid in sorted(at, key=lambda t: (-t[0], t[1])) if p <= seg_index]
+    else:
+        chain = [hid for p, hid in sorted(at, key=lambda t: (t[0], t[1])) if p >= seg_index]
+    if not chain:  # no point behind (cannot happen with end points on the first/last segment); nearest overall
+        chain = [min(at, key=lambda t: (abs(t[0] - seg_index), t[1]))[1]]
+    return chain[0], chain[1:]
+
+
+def zones(segs: list[dict], hps: list[dict], line: LineString) -> list[dict]:
+    """Two approach zones per segment (owner decision 2026-11): AZ-<nnn>S before the segment for southbound traffic,
+    AZ-<nnn>N after it for northbound traffic. Holding point = nearest point behind the zone, fallbacks further back."""
     out = []
-    for s in segs:
-        if counts[s["id"]] < min_events:
-            continue
-        i = pos[s["id"]]
+    for i, s in enumerate(segs):
         n = s["id"].split("-")[-1]
-        # Southbound: zone before startKm
         sb_km = max(0.0, s["startKm"] - APPROACH_EXTENT_KM)
-        if i > haf_i:
-            sb_hp, sb_fb = "HP-HAFLONG", ["HP-LUMDING"]
-        else:
-            sb_hp, sb_fb = "HP-LUMDING", []
+        sb_hp, sb_fb = assign_holding_points(segs, hps, i, "Southbound")
         out.append({"id": f"AZ-{n}S", "name": f"{s['name'].split('–')[0].strip()} side", "direction": "Southbound",
                     "segmentId": s["id"], "center": to_latlon(LineString([line.interpolate(sb_km * 1000)] * 2))[0],
                     "extentKm": APPROACH_EXTENT_KM, "locationKm": round(sb_km, 3),
                     "nearestHoldingPointId": sb_hp, "fallbackHoldingPointIds": sb_fb, "diversionRoutes": []})
-        # Northbound: zone after endKm
         nb_km = min(line.length / 1000, s["endKm"] + APPROACH_EXTENT_KM)
-        if i < haf_i:
-            nb_hp, nb_fb = "HP-HAFLONG", ["HP-SILCHAR"]
-        else:
-            nb_hp, nb_fb = "HP-SILCHAR", []
+        nb_hp, nb_fb = assign_holding_points(segs, hps, i, "Northbound")
         out.append({"id": f"AZ-{n}N", "name": f"{s['name'].split('–')[-1].strip()} side", "direction": "Northbound",
                     "segmentId": s["id"], "center": to_latlon(LineString([line.interpolate(nb_km * 1000)] * 2))[0],
                     "extentKm": APPROACH_EXTENT_KM, "locationKm": round(nb_km, 3),
@@ -223,14 +224,14 @@ def zones(segs: list[dict], hps: list[dict], line: LineString, counts: dict[str,
     return out
 
 
-def build(min_events: int) -> dict:
+def build() -> dict:
     ways, poly = load_nh27()
     line, stats = corridor_line(ways, poly)
     pl = places()
     segs = split(line, pl)
     counts = landslide_counts(segs)
     hps = holding_points(segs, line, pl)
-    zs = zones(segs, hps, line, counts, min_events)
+    zs = zones(segs, hps, line)
     for s in segs:
         s["pastLandslides500m"] = counts[s["id"]]
     return {"line": line, "stats": stats, "segments": segs, "holdingPoints": hps, "zones": zs}
@@ -299,14 +300,13 @@ def load_postgis(result: dict) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--min-events", type=int, default=3, help="past landslides within 500 m that make a segment get approach zones")
     ap.add_argument("--no-db", action="store_true")
     args = ap.parse_args()
-    r = build(args.min_events)
+    r = build()
     segs = r["segments"]
     DATA.mkdir(parents=True, exist_ok=True)
     (DATA / "segments.geojson").write_text(json.dumps(geojson(segs), ensure_ascii=False, indent=1), encoding="utf-8")
-    meta = {**r["stats"], "segments": len(segs), "fingerprint": fingerprint(segs), "minEventsForZones": args.min_events}
+    meta = {**r["stats"], "segments": len(segs), "fingerprint": fingerprint(segs)}
     (DATA / "corridor.json").write_text(json.dumps({
         "meta": meta, "holdingPoints": [{k: v for k, v in h.items() if not k.startswith("_")} for h in r["holdingPoints"]],
         "zones": r["zones"]}, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -325,8 +325,7 @@ def main() -> int:
           f">=5: {(cnt >= 5).sum()}; max {cnt.max()} ({cnt.idxmax()})")
     for h in r["holdingPoints"]:
         print(f"holding point {h['id']} -> {h['segmentId']}" + (f" (town {h['_offRoadKm']} km from road)" if "_offRoadKm" in h else ""))
-    print(f"zones: {len(r['zones'])} for {len(r['zones']) // 2} risky segments: "
-          + ", ".join(sorted({z['segmentId'] for z in r['zones']})))
+    print(f"zones: {len(r['zones'])} (two per segment)")
     print("fingerprint", meta["fingerprint"])
     print("postgis:", "skipped (--no-db)" if args.no_db else load_postgis(r))
     return 0

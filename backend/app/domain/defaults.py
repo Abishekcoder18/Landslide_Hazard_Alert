@@ -1,7 +1,7 @@
 """Default configuration (NFR-09). Starting assumptions to be calibrated; the administrator edits them."""
 
 DEFAULT_CONFIG: dict = {
-    "weights": {"susceptibility": 35, "rainfall": 30, "slope": 20, "history": 15},
+    "weights": {"susceptibility": 25, "rainfall": 45, "slope": 15, "history": 15},
     "thresholds": {"yellow": 30, "orange": 55, "red": 75},
     "validityHours": 6,
     "staleInputHours": 6,

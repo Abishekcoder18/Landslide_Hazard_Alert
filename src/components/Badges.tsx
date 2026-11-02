@@ -76,7 +76,8 @@ const APPROVAL: Record<ApprovalStatus, { tone: Tone; label: string }> = {
   pending: { tone: 'yellow', label: 'Pending' },
   escalated: { tone: 'red', label: 'Escalated' },
   approved: { tone: 'green', label: 'Approved' },
-  rejected: { tone: 'grey', label: 'Rejected' }
+  rejected: { tone: 'grey', label: 'Rejected' },
+  withdrawn: { tone: 'grey', label: 'Withdrawn' }
 };
 export const ApprovalBadge: React.FC<{ status: ApprovalStatus }> = ({ status }) => <Pill tone={APPROVAL[status].tone}>{APPROVAL[status].label}</Pill>;
 

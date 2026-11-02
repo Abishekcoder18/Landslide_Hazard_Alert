@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, MapPin, Route, Clock, ShieldCheck, Megaphone } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, MapPin, Route, Clock, ShieldCheck, Megaphone } from 'lucide-react';
 import { TopBar } from '../components/TopBar';
 import { DecisionChip, EstTag, Pill, RiskBadge, RoadStateBadge } from '../components/Badges';
 import { Button, Card, CardHeader, PageBody, Tabs, Td, Th, cx } from '../components/ui';
@@ -249,11 +249,22 @@ export const DecisionsPage: React.FC = () => {
   const { can, act } = useApp();
   const { snap, segments, decisionByZone } = useCorridor();
   const [tab, setTab] = useState<'zones' | 'traveller' | 'checks'>('zones');
+  const [showGo, setShowGo] = useState(false);
   const bySegment = useMemo(() => {
     const m = new Map<string, ApproachZone[]>();
     snap.zones.forEach(z => m.set(z.segmentId, [...(m.get(z.segmentId) ?? []), z]));
     return [...m.entries()];
   }, [snap.zones]);
+  // Action first: CLOSE recommended, then HOLD/DIVERT (incl. heavy-vehicle HOLD); all-GO segments collapse into one row.
+  const { active, goZones } = useMemo(() => {
+    const rank = (d?: ZoneDecision) =>
+      !d ? 2 : d.result.closeRecommended ? 0 : ['HOLD', 'DIVERT'].includes(d.result.decision) || d.heavyResult?.decision === 'HOLD' ? 1 : 2;
+    const ranked = bySegment.map(([segId, zones], i) => ({ segId, zones, i, r: Math.min(...zones.map(z => rank(decisionByZone[z.id]))) }));
+    return {
+      active: ranked.filter(x => x.r < 2).sort((a, b) => a.r - b.r || a.i - b.i),
+      goZones: ranked.filter(x => x.r === 2).flatMap(x => x.zones)
+    };
+  }, [bySegment, decisionByZone]);
   const pendingAlert = (segId: string) => snap.approvals.some(a => a.kind === 'alert' && a.segmentId === segId && (a.status === 'pending' || a.status === 'escalated'));
 
   return (
@@ -270,7 +281,7 @@ export const DecisionsPage: React.FC = () => {
           ]}
         />
         {tab === 'zones' &&
-          bySegment.map(([segId, zones]) => (
+          active.map(({ segId, zones }) => (
             <div key={segId} className="space-y-2">
               <div className="flex items-center justify-between">
                 <h2 className="text-[13px] font-semibold text-[#1F2933]">
@@ -289,6 +300,46 @@ export const DecisionsPage: React.FC = () => {
               </div>
             </div>
           ))}
+        {tab === 'zones' && goZones.length > 0 && (
+          <Card>
+            <button
+              onClick={() => setShowGo(v => !v)}
+              aria-expanded={showGo}
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-[#FAF8F3]"
+            >
+              <span className="flex items-center gap-2 text-[13px] font-semibold">
+                {showGo ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                <DecisionChip decision="GO" /> <span>· {goZones.length}</span>
+              </span>
+              <span className="text-[11px] text-[#6B7280]">GO · GO caution</span>
+            </button>
+            {showGo && (
+              <div className="overflow-x-auto border-t border-[#E7E3DA]">
+                <table className="w-full">
+                  <thead className="bg-[#FAF8F3] border-b border-[#E7E3DA]">
+                    <tr><Th>Zone</Th><Th>Direction</Th><Th>Segment</Th><Th>Risk</Th><Th>Decision</Th><Th>Rule</Th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E7E3DA]">
+                    {goZones.map(z => {
+                      const d = decisionByZone[z.id];
+                      const seg = segments[z.segmentId];
+                      return (
+                        <tr key={z.id}>
+                          <Td className="font-mono">{z.id}</Td>
+                          <Td>{z.direction}</Td>
+                          <Td className="whitespace-nowrap"><span className="font-mono mr-1">{seg.id}</span>{seg.name}</Td>
+                          <Td><RiskBadge level={seg.riskLevel} /></Td>
+                          <Td><DecisionChip decision={d.result.decision} /></Td>
+                          <Td className="font-mono text-xs">{d.result.ruleId}</Td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        )}
         {tab === 'traveller' && <TravellerPreview />}
         {tab === 'checks' && <RuleChecks />}
       </PageBody>

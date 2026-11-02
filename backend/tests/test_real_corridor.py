@@ -85,7 +85,7 @@ def test_f1_real_segments_model_score_and_dated_rainfall(env):
         assert i["rainfallDate"] == "2022-05-10" and i["rainfall7d"] is not None
         assert x["riskLevel"] != "NO_DATA"  # all inputs present
     assert any("Model susceptibility" in r for x in s["segments"] for r in x["reasons"])
-    assert len(s["zones"]) == 18 and {z["direction"] for z in s["zones"]} == {"Northbound", "Southbound"}
+    assert len(s["zones"]) == 274 and {z["direction"] for z in s["zones"]} == {"Northbound", "Southbound"}  # 2 per segment
     with store.connect() as conn:
         n, km = conn.execute("SELECT count(*), sum(ST_Length(geom::geography)) / 1000 FROM segments WHERE ST_IsValid(geom)").fetchone()
     assert n == 137 and 130 < km < 145
@@ -107,7 +107,7 @@ def test_f1_rainfall_date_switch_raises_risk(env):
     assert client.patch("/api/config", json={"scenarioDate": "2022-05-10"}, headers=admin).status_code == 204
     s = snap(client, off)
     by_id = {a["id"]: a for a in s["approvals"]}
-    assert all(by_id[i]["status"] == "rejected" and by_id[i]["decidedBy"] == "Decision engine" for i in storm_closures)
+    assert all(by_id[i]["status"] == "withdrawn" and by_id[i]["decidedBy"] == "Decision engine" for i in storm_closures)
     assert sum(a["action"] == "CLOSE recommendation withdrawn" for a in s["audit"]) == len(storm_closures)
     assert client.patch("/api/config", json={"scenarioDate": "2030-01-01"}, headers=admin).status_code == 400
     assert client.patch("/api/config", json={"scenarioDate": "15-05-2022"}, headers=admin).status_code == 400
@@ -191,3 +191,29 @@ def test_f2_full_flow_on_real_segment(env):
     rap = next(a for a in snap(client, off)["approvals"] if a["kind"] == "reopening" and a["segmentId"] == SEG)
     client.post(f"/api/approvals/{rap['id']}/decision", json={"approve": True}, headers=off)
     assert seg(snap(client, off), SEG)["roadState"] == "OPEN"
+
+def test_every_red_or_orange_segment_has_zones(env):
+    """Owner decision 2026-11: two zones for every segment, so no Red/Orange segment is left without a traveller decision."""
+    client, *_ = env
+    admin, off = login(client, "admin"), login(client, "officer")
+    client.patch("/api/config", json={"scenarioDate": "2022-05-15"}, headers=admin)
+    s = snap(client, off)
+    zones_by_seg: dict[str, set] = {}
+    for z in s["zones"]:
+        zones_by_seg.setdefault(z["segmentId"], set()).add(z["direction"])
+    risky = [x["id"] for x in s["segments"] if x["riskLevel"] in ("ORANGE", "RED")]
+    assert risky  # 15 May 2022 has Orange/Red segments
+    assert all(zones_by_seg.get(sid) == {"Northbound", "Southbound"} for sid in risky)
+    decided = {d["zoneId"] for d in s["decisions"]}
+    assert decided == {z["id"] for z in s["zones"]}
+
+
+def test_dry_date_no_zone_on_hold(env):
+    """Default weights 25/45/15/15: on a dry day (IMD rainfall 20 Mar 2022) no zone is on HOLD."""
+    client, *_ = env
+    admin, off = login(client, "admin"), login(client, "officer")
+    assert client.patch("/api/config", json={"scenarioDate": "2022-03-20"}, headers=admin).status_code == 204
+    s = snap(client, off)
+    assert max(x["inputs"]["rainfall7d"] for x in s["segments"]) < 5  # dry week in the IMD data
+    holds = [d["zoneId"] for d in s["decisions"] if d["result"]["decision"] == "HOLD" or (d.get("heavyResult") or {}).get("decision") == "HOLD"]
+    assert holds == []

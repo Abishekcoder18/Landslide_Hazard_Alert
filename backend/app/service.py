@@ -226,10 +226,10 @@ class Workflow:
         for a in self.s["approvals"]:
             if a["kind"] == "closure" and a["status"] in ("pending", "escalated") and a["segmentId"] not in recommended:
                 before = a["status"]
-                a.update(status="rejected", decidedBy="Decision engine", decidedAt=self.iso())
+                a.update(status="withdrawn", decidedBy="Decision engine", decidedAt=self.iso())
                 level = effective.get(a["segmentId"], {}).get("riskLevel", "—")
                 self.audit("Decision engine", "system", "CLOSE recommendation withdrawn", f"{a['segmentId']} · {level}",
-                           entity=a["id"], before=before, after="rejected")
+                           entity=a["id"], before=before, after="withdrawn")
 
     def create_approval(self, **a) -> dict:
         now = self.now()

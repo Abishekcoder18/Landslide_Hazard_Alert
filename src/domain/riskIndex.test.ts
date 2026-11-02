@@ -60,8 +60,10 @@ test('F1 model: susceptibilityScore replaces the category in the Risk Index and 
   const cat = computeRisk(base({ susceptibility: 'Low', slopeDeg: 30, rainfall3d: 150, pastIncidents: 3 }), DEFAULT_CONFIG, NOW);
   const model = computeRisk(base({ susceptibility: 'Low', susceptibilityScore: 0.92, slopeDeg: 30, rainfall3d: 150, pastIncidents: 3 }), DEFAULT_CONFIG, NOW);
   assert.ok(model.riskIndex! > cat.riskIndex!);
-  // 0.92 vs Low (0.25) with weight 35/100 -> +23.45 points before rounding each index separately
-  assert.ok([23, 24].includes(model.riskIndex! - cat.riskIndex!));
+  // 0.92 vs Low (0.25) at the configured susceptibility weight; each index is rounded separately (±1)
+  const w = DEFAULT_CONFIG.weights;
+  const delta = ((0.92 - 0.25) * w.susceptibility * 100) / (w.susceptibility + w.rainfall + w.slope + w.history);
+  assert.ok(Math.abs(model.riskIndex! - cat.riskIndex! - delta) <= 1);
   assert.ok(model.reasons.includes('Model susceptibility 0.92'));
   assert.ok(!model.reasons.some(r => r.startsWith('GSI susceptibility')));
 });

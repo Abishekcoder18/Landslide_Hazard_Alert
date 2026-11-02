@@ -76,7 +76,8 @@ def test_zones_and_holding_points_reference_real_segments(fc, corridor):
         assert all(x in hps for x in z["fallbackHoldingPointIds"])
         assert re.fullmatch(r"AZ-\d{3}[NS]", z["id"])
         by_seg.setdefault(z["segmentId"], []).append(z["direction"])
-    # one zone per direction for each risky segment
+    # two zones (one per direction) for every segment
+    assert set(by_seg) == ids
     assert all(sorted(d) == ["Northbound", "Southbound"] for d in by_seg.values())
 
 
@@ -88,6 +89,6 @@ def test_ids_identical_on_rerun(fc, corridor):
         pytest.skip("source data on D:\\ not available")
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
     import segment_nh27 as seg
-    r = seg.build(corridor["meta"]["minEventsForZones"])
+    r = seg.build()
     assert [s["id"] for s in r["segments"]] == [f["id"] for f in fc["features"]]
     assert seg.fingerprint(r["segments"]) == corridor["meta"]["fingerprint"]

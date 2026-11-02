@@ -17,7 +17,7 @@ from playwright.sync_api import Page, sync_playwright
 
 REPO = Path(__file__).resolve().parents[2]
 EVID = REPO / "docs" / "evidence"
-FRONT, API = "http://localhost:3000", "http://localhost:8000"
+FRONT, API = "http://localhost:3000", "http://127.0.0.1:8000"  # IPv4: "localhost" tries ::1 first on Windows (~2 s per call)
 SEG = "NH27-DH-108"
 PHOTO = "data:image/png;base64," + base64.b64encode(
     bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000"
@@ -46,7 +46,7 @@ def watch(page: Page) -> None:
     page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
 
     def on_resp(r):
-        if r.url.startswith(API + "/api/"):
+        if "/api/" in r.url and ":8000" in r.url:
             api_calls["n"] += 1
             if r.status >= 400:
                 api_calls["failed"].append(f"{r.request.method} {r.url} -> {r.status}")

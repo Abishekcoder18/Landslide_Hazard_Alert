@@ -100,6 +100,30 @@ git-ignored `backend/data/` and to schema `resilion2`. Data inventory: `docs/DAT
 | Incident estimate → expected wait; records | `40-*.png`, `41-*.png`, `42-records-real.png` |
 | Earlier sample-mode screens | `01…23-*.png` |
 
+## Owner decisions, 2026-11
+
+Delegated by the owner (Abishek) and implemented as stated; BR-01..BR-12 are unchanged.
+
+1. **Risk Index default weights 25/45/15/15** (susceptibility / rainfall / slope / history); thresholds unchanged (30/55/75).
+   Real corridor, replayed by `backend/scripts/scenario_report.py` (137 segments, 274 zones):
+
+   | IMD rainfall date | Green | Yellow | Orange | Red | No data | Zones HOLD | Zones GO caution | Zones GO | CLOSE recommended |
+   |---|---|---|---|---|---|---|---|---|---|
+   | 2022-03-20 | 90 | 47 | 0 | 0 | 0 | 0 | 94 | 180 | 0 |
+   | 2022-05-10 | 62 | 72 | 3 | 0 | 0 | 6 | 144 | 124 | 0 |
+   | 2022-05-13 | 43 | 48 | 36 | 10 | 0 | 92 | 96 | 86 | 10 |
+   | 2022-05-15 | 31 | 51 | 23 | 32 | 0 | 110 | 102 | 62 | 32 |
+
+2. **Two approach zones for every NH-27 segment** (274 zones); the zone-selection thresholds were removed. Holding point
+   = nearest point at or behind the segment for the zone's direction, fallbacks further back (BR-04). The Decisions page
+   lists CLOSE / HOLD / DIVERT first and collapses all-GO segments into one "GO · n" row. Measured
+   (`backend/scripts/measure_perf.py`): snapshot 570 KB JSON, **48 KB with gzip** (enabled), server latency median
+   171 ms; Corridor page ready in 2.0 s, Decisions in 0.8 s (Chromium, page reload, dev server).
+3. **Approval status "withdrawn"** for a CLOSE recommendation the rules no longer support (audit "CLOSE recommendation
+   withdrawn", decided by "Decision engine"); the engine never approves.
+4. **Optional free local model (Ollama)** may stand in for the photo check and alert writer when no
+   `ANTHROPIC_API_KEY` is set, always labelled "Local model", never "Claude". This changes PRD §9 (model) for that case.
+
 ## Contradictions / decisions to note
 
 - **Risk Index calibration on real data (owner decision).** With the default weights 35/30/20/15 and thresholds 30/55/75,

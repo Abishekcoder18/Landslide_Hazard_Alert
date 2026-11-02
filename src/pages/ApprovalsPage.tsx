@@ -26,7 +26,7 @@ const CLOSURE: { id: ClosureType; label: string }[] = [
 const Decide: React.FC<{ a: Approval; closureType?: ClosureType }> = ({ a, closureType }) => {
   const { session, act, now } = useApp();
   const allowed = session ? canDecideApproval(session.role, a.status) : false;
-  if (a.status === 'approved' || a.status === 'rejected') {
+  if (a.status === 'approved' || a.status === 'rejected' || a.status === 'withdrawn') {
     return (
       <div className="text-[13px] text-[#6B7280]">
         {a.decidedBy} · {fmtDateTime(a.decidedAt)}
@@ -241,7 +241,7 @@ export const ApprovalsPage: React.FC = () => {
   const { snap } = useCorridor();
   const { now } = useApp();
   const open = snap.approvals.filter(a => a.status === 'pending' || a.status === 'escalated');
-  const closed = snap.approvals.filter(a => a.status === 'approved' || a.status === 'rejected');
+  const closed = snap.approvals.filter(a => a.status === 'approved' || a.status === 'rejected' || a.status === 'withdrawn');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = snap.approvals.find(a => a.id === selectedId) ?? open[0] ?? closed[0];
 

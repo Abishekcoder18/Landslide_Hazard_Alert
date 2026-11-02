@@ -216,7 +216,8 @@ export interface Incident {
 }
 
 export type ApprovalKind = 'closure' | 'reopening' | 'alert';
-export type ApprovalStatus = 'pending' | 'escalated' | 'approved' | 'rejected';
+/** 'withdrawn': a CLOSE recommendation the rules no longer support, withdrawn by the decision engine (never approved by it). */
+export type ApprovalStatus = 'pending' | 'escalated' | 'approved' | 'rejected' | 'withdrawn';
 
 export interface Approval {
   id: string;

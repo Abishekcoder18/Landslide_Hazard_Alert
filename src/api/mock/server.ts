@@ -217,10 +217,10 @@ export class MockServer {
     for (const a of this.s.approvals) {
       if (a.kind === 'closure' && (a.status === 'pending' || a.status === 'escalated') && !recommended.has(a.segmentId)) {
         const before = a.status;
-        a.status = 'rejected';
+        a.status = 'withdrawn';
         a.decidedBy = 'Decision engine';
         a.decidedAt = this.now().toISOString();
-        this.audit('Decision engine', 'system', 'CLOSE recommendation withdrawn', `${a.segmentId} · ${effective[a.segmentId]?.riskLevel ?? '—'}`, { entity: a.id, before, after: 'rejected' });
+        this.audit('Decision engine', 'system', 'CLOSE recommendation withdrawn', `${a.segmentId} · ${effective[a.segmentId]?.riskLevel ?? '—'}`, { entity: a.id, before, after: 'withdrawn' });
       }
     }
   }

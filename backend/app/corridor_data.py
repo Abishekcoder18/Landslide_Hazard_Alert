@@ -26,9 +26,6 @@ from .domain.risk_index import susceptibility_category
 from .domain.timeutil import to_iso
 
 REQUIRED = ("ref_segments", "ref_zones", "ref_holding_points", "segment_features", "segment_scores", "model_runs", "imd_rain_daily")
-# Approach zones are kept for segments with a landslide history AND a high model score (assumption, configurable here).
-ZONE_MIN_PAST_LANDSLIDES = 5
-ZONE_MIN_SCORE = 0.6
 SOURCES = {
     "terrain": "Copernicus DEM 30 m",
     "history": "GSI inventory (RESILION 1)",
@@ -98,12 +95,8 @@ def load_corridor(conn: psycopg.Connection, schema: str, scenario_day: date, now
             "computedAt": updated, "validUntil": updated,
             "inputs": {"imdWarning": "NONE", "gsiBulletin": False, **inputs[sid]},
         })
-    by = {s["id"]: s for s in segments}
-    zones = []
-    for (z,) in conn.execute(f"SELECT data FROM {schema}.ref_zones ORDER BY pos").fetchall():
-        inp = by[z["segmentId"]]["inputs"]
-        if (inp["pastIncidents"] or 0) >= ZONE_MIN_PAST_LANDSLIDES and (inp["susceptibilityScore"] or 0) >= ZONE_MIN_SCORE:
-            zones.append(z)
+    # Two approach zones per segment (owner decision 2026-11), built by backend/scripts/segment_nh27.py.
+    zones = [z for (z,) in conn.execute(f"SELECT data FROM {schema}.ref_zones ORDER BY pos").fetchall()]
     hps = [h for (h,) in conn.execute(f"SELECT data FROM {schema}.ref_holding_points ORDER BY pos").fetchall()]
     model = conn.execute(f"SELECT version, trained_at, meta->'validation'->'results'->(meta->>'model') FROM {schema}.model_runs "
                          "ORDER BY trained_at DESC LIMIT 1").fetchone()
