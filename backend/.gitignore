@@ -4,3 +4,5 @@ __pycache__/
 uploads/
 tests/fixtures/parity.json
 .pytest_cache/
+.venv-data/
+data/
