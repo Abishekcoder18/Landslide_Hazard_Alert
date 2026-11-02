@@ -1242,6 +1242,17 @@ Dima Hasao bbox used: lon 92.55–93.45 E, lat 24.95–25.95 N.
 - `D:\final_prediction.jpeg`
 - `D:\RESILION_Stage1_Problem_Framing_FINAL.pptx`
 
+## Downloaded public datasets (gap filling; `backend/scripts/download_data.py`, stored in git-ignored `backend/data/raw/`)
+
+| Dataset | Use | Coverage | Licence |
+|---|---|---|---|
+| Copernicus DEM GLO-30, tiles N24/N25 × E092/E093 | slope, aspect, curvature, relief (model + segment features) | 30 m, whole district | Copernicus DEM licence (free, attribution) |
+| ESA WorldCover 2021 v200 | land-cover shares (model + segment features) | district window read at ~20 m | CC BY 4.0 |
+| IMD gridded daily rainfall 0.25° (Pai et al. 2014) | 24 h / 3-day / 7-day rainfall per segment for a dated scenario | 2010-01-01 – 2025-12-31, 30 cells around the district | IMD, free for research |
+
+Priority team datasets (RESILION 1 final) and their role: `assam_road_dataset_final.csv` (NH-27 selection, bridges, all-road distance), `Assam_DEM_Terrain_Road_Features.csv` (per-road terrain; cross-check r = 0.85 against DEM slope on NH-27 segments), `assam_landslide_road_events.csv` (labels and segment history), `Assam_Flood_ML_Ready_FINAL.csv` (district-level flood context: 75 events name Dima Hasao, coordinates are district HQs), `assam_disruption_road_events.csv` (5 Dima Hasao rows in 2022, none with coordinates).
+
+
 ## Raster / DEM search
 
 Searched all of D:\ (excluding QGIS, node_modules, venvs, games) for .tif/.tiff/.hgt/.asc/.img/.vrt/.nc/.dem/.bil: **none found**. Terrain exists only as per-OSM-way statistics (`z_mean`, `slope_mean`, `elevation_change`, `terrain_gradient`) in `Assam_DEM_Terrain_Road_Features.csv` / `assam_road_terrain.gpkg`; aspect and curvature are not available.
