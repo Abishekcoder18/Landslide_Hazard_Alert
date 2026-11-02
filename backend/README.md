@@ -9,6 +9,9 @@ Implements `docs/API_CONTRACT.md`. The frontend uses it when `VITE_API_URL` is s
 | `app/store.py` | PostGIS storage; segment/zone geometry; corridor distance via `ST_Distance`; append-only trigger on `audit_log` and `decision_records` |
 | `app/ai.py` | Claude Sonnet 5.5 photo check (FR-21) and alert writer (FR-28). Off without `ANTHROPIC_API_KEY`; every failure falls back to manual review / plain template |
 | `app/main.py` | FastAPI endpoints, photo upload, sign-in tokens |
+| `app/corridor_data.py` | Real NH-27 corridor from PostGIS: 137 segments, zones, holding points, model score, IMD rainfall for a date; input feed |
+| `scripts/` | Data pipeline (inventory → download → segmentation → features → model → model card), RESILION 1 safety check, browser walkthrough |
+| `models/` | `susceptibility.joblib` (LightGBM, 0.3 MB) + `model_meta.json` (metrics, data, version) |
 
 ## Run on Windows (PowerShell)
 
@@ -52,7 +55,7 @@ cd backend
 python -m pytest -q
 ```
 
-`test_api.py` needs the PostGIS database above (set `TEST_DATABASE_URL` to a disposable database — it is wiped). `test_parity.py` needs Node.js and `npm install` at the repo root.
+`test_api.py` uses (and wipes) only schema `resilion2_test`; `test_real_corridor.py` copies the reference tables from `resilion2` into `resilion2_rtest` and drops it afterwards (skipped until the data pipeline has run). The database URL comes from `TEST_DATABASE_URL` or `DATABASE_URL`. `test_parity.py` needs Node.js and `npm install` at the repo root. `test_segments.py` / `test_features.py` run fully in the data venv (`.venv-data`).
 
 ## Turning on Claude
 
@@ -64,4 +67,53 @@ Requests use server-side refusal fallbacks (`fallbacks: "default"`): if a safety
 
 - Sign-in is prototype level: signed token with user ID and role, no password yet.
 - Escalation (FR-17) is evaluated on every read; the UI polls every 5 s.
-- `POST /api/admin/reset-sample-data` wipes everything, including the audit log; set `ALLOW_SAMPLE_RESET=false` outside the hackathon.
+- `POST /api/admin/reset-sample-data` wipes the RESILION 2.0 workflow tables (schema `resilion2` only), including the audit log, and reloads the corridor; set `ALLOW_SAMPLE_RESET=false` outside the hackathon.
+
+## Shared database: schema isolation
+
+The database can be shared with RESILION 1 (which owns `public.*`, including a `public.incidents` table). RESILION 2.0
+creates and writes tables **only** in schema `DB_SCHEMA` (default `resilion2`; tests use `resilion2_test` /
+`resilion2_rtest`). Every table name is schema-qualified and the backend refuses to connect unless `current_schema()` is
+that schema. PostGIS functions are only used from `public`. `DATABASE_URL` may be SQLAlchemy style
+(`postgresql+psycopg://…`).
+
+Prove RESILION 1 is untouched (row count + md5 of every table outside `resilion2*`):
+
+```powershell
+.venv\Scripts\python.exe scripts\check_public_untouched.py snapshot   # once, before the first run
+.venv\Scripts\python.exe scripts\check_public_untouched.py verify     # any time later
+```
+
+## Real corridor data and the susceptibility model
+
+Separate venv for the geospatial/ML scripts (from the repo root):
+
+```powershell
+python -m venv backend\.venv-data
+backend\.venv-data\Scripts\python.exe -m pip install geopandas pyogrio rasterio shapely pyproj networkx scipy pandas pyarrow scikit-learn lightgbm joblib imdlib psycopg[binary] python-dotenv pytest playwright
+backend\.venv-data\Scripts\python.exe backend\scripts\inventory.py       # docs/DATA_INVENTORY.md (read only)
+backend\.venv-data\Scripts\python.exe backend\scripts\download_data.py   # Copernicus DEM, ESA WorldCover window, IMD rain 2010-2025
+backend\.venv-data\Scripts\python.exe backend\scripts\segment_nh27.py    # 137 x ~1 km NH-27 segments -> resilion2.ref_*
+backend\.venv-data\Scripts\python.exe backend\scripts\build_features.py  # terrain/drainage/history/rain -> resilion2.segment_features, imd_rain_daily
+backend\.venv-data\Scripts\python.exe backend\scripts\train_model.py     # LightGBM + spatial CV -> models/, resilion2.segment_scores
+backend\.venv-data\Scripts\python.exe backend\scripts\model_card.py      # docs/MODEL_CARD.md from model_meta.json
+```
+
+Team data is read from `D:\` (RESILION 1 final datasets first) and never copied into the repo; derived files go to
+git-ignored `backend/data/`. The scripts drop the `PROJ_LIB` / `GDAL_DATA` variables that the PostGIS installer sets,
+for their own process only.
+
+Then restart the backend; on first start (or after "Reload corridor data") it seeds the real corridor.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DB_SCHEMA` | `resilion2` | RESILION 2.0 schema (must start with `resilion2`) |
+| `CORRIDOR_SOURCE` | `auto` | `auto` = real corridor when loaded, else sample; `sample` = always sample |
+| `SCENARIO_DATE` | `2022-05-10` | IMD rainfall date for the initial load (administrator can change it in Configuration) |
+
+Browser walkthrough of F1 → F3 → F2 on the real corridor (backend on :8000, frontend on :3000):
+
+```powershell
+backend\.venv-data\Scripts\python.exe -m playwright install chromium
+backend\.venv-data\Scripts\python.exe backend\scripts\e2e_walkthrough.py   # screenshots docs/evidence/30-42
+```

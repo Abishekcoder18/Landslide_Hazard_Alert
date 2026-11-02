@@ -27,7 +27,7 @@ Payload and response shapes are the TypeScript types in `src/types/index.ts` (PR
 | PATCH | `/api/config` | `Partial<Config>` | 204 | FR-06, NFR-09 |
 | PATCH | `/api/zones/{id}` | `ZonePatch` | 204 | FR-08, BR-04 |
 | PATCH | `/api/segments/{id}/inputs` | `Partial<SegmentInputs>` | 204 | FR-02, FR-05 (until live feeds) |
-| POST | `/api/admin/reset-sample-data` | — | 204 | sample data only |
+| POST | `/api/admin/reset-sample-data` | — | 204 | admin; clears the workflow and reloads the corridor (real data from PostGIS when loaded, else sample data) |
 
 `GET /api/snapshot` may later be split into per-entity endpoints; the UI polls it every 5 s.
 
@@ -37,9 +37,31 @@ Payload and response shapes are the TypeScript types in `src/types/index.ts` (PR
 - **Second approver** can decide only `escalated` approvals; `pending` escalates after `config.escalationMinutes` (FR-17, AC-10).
 - **Risk Index** (`src/domain/riskIndex.ts`): weighted rules, IMD/GSI only raise (BR-05), missing/stale → No data (BR-06), 6-hour validity then recompute (BR-12).
 - **Decision engine** (`src/domain/decisionEngine.ts`) runs per approach zone for light and heavy vehicles after every state change; a decision record row is appended only when the decision changes (FR-18).
-- **CLOSE recommendation**: one open closure approval per segment while any zone has `closeRecommended`.
+- **CLOSE recommendation**: one open closure approval per segment while any zone has `closeRecommended`. When the rules no longer recommend CLOSE (e.g. rainfall fell), a pending/escalated closure approval is withdrawn: `status: "rejected"`, `decidedBy: "Decision engine"`, audit "CLOSE recommendation withdrawn". The engine never approves.
 - **Reports**: checks and routing in `src/domain/reportChecks.ts`. The note is stored as data and never sent to a model as instructions (BR-10). AI output never changes segment state (BR-07).
 - **Photo check**: Claude Sonnet 5.5 vision, fixed labels `debris | crack | fallen_tree | water | clear | not_relevant`, `blockedShare` 0–100, `confidence` 0–1. On error/timeout: `ai = null`, `aiError` set, route `manual_review` (FR-26). Sample photo IDs (`sample-debris`, `sample-clear`) return labelled sample results.
 - **Alerts**: model output in en/hi/as/bn is validated with `validateAlert` (`src/domain/alerts.ts`); failures are blocked and the plain template is used (BR-09). Dimasa only from native-speaker templates (FR-29). CAP built with `buildCap` after approval (FR-31).
 - **Audit log** is append-only (FR-34).
 - `ANTHROPIC_API_KEY` lives only in the backend environment.
+
+## Real corridor data (backend, schema `resilion2`)
+
+When the data pipeline has loaded PostGIS (`backend/scripts`, see `backend/README.md`) and `CORRIDOR_SOURCE=auto`
+(default), the backend seeds the real NH-27 corridor instead of the sample seed. Added fields (all optional, so sample
+mode is unchanged):
+
+| Where | Field | Meaning |
+|---|---|---|
+| `Snapshot` | `corridor: CorridorMeta` | `{source: "postgis" \| "sample", scenarioDate, segments, zones, modelVersion, modelCv}` |
+| `SegmentInputs` | `susceptibilityScore` | 0–1 model score; **replaces** the categorical susceptibility in the Risk Index (reason "Model susceptibility 0.82"); `susceptibility` is then the derived category (display) |
+| `SegmentInputs` | `modelVersion` | e.g. `susc-lgbm-20261102` |
+| `SegmentInputs` | `rainfallDate` | date of the IMD gridded rainfall used (historical scenario) |
+| `SegmentInputs` | `sources` | short labels: `{terrain, rainfall, history}` |
+| `Config` | `scenarioDate` | `PATCH /api/config {scenarioDate: "YYYY-MM-DD"}` (admin, 2010-01-07 … 2025-12-31) re-reads rainfall for that date; 400 outside the range or in sample mode |
+
+- **Input feed:** when a Risk Level's validity expires, the inputs are re-read from PostGIS (terrain, model score,
+  history, IMD rainfall for `scenarioDate`) before recomputing, so real data does not turn into No data (audit "Inputs refreshed").
+- **Manual edits** via `PATCH /api/segments/{id}/inputs`: only changed fields count. Changing data fields (susceptibility,
+  slope, rainfall, history) marks the segment `sample: true` (and a manual category drops the model score); setting only
+  `imdWarning` / `gsiBulletin` keeps the real data.
+- Segment IDs `NH27-DH-001…137`; zones `AZ-<nnn>S` (southbound, before the segment) and `AZ-<nnn>N` (northbound).
