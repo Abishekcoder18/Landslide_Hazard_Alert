@@ -65,6 +65,15 @@ for (const s of susc) for (const slope of [5, 22, 34, 50]) for (const r3 of [0, 
   risk.push({ input: inp, output: computeRisk(inp, DEFAULT_CONFIG, NOW) });
 }
 risk.push({ input: { ...inputs('NONE'), rainfall3d: null }, output: computeRisk({ ...inputs('NONE'), rainfall3d: null }, DEFAULT_CONFIG, NOW) });
+// Model susceptibility score (replaces the category when present), incl. rounding ties and out-of-range values.
+const SCORES = [null, 0, 0.005, 0.015, 0.125, 0.135, 0.335, 0.5, 0.589, 0.825, 0.875, 0.995, 1, 1.2, -0.1];
+for (const sc of SCORES) for (const s of ['High', null] as const) for (const r3 of [0, 142, 260]) for (const imd of ['NONE', 'ORANGE'] as ImdWarning[]) {
+  const inp: SegmentInputs = {
+    ...inputs(imd), susceptibility: s, susceptibilityScore: sc, slopeDeg: 28.4, rainfall24h: Math.round(r3 / 2), rainfall3d: r3,
+    rainfall7d: r3 * 1.5, pastIncidents: 3, modelVersion: 'susc-test'
+  };
+  risk.push({ input: inp, output: computeRisk(inp, DEFAULT_CONFIG, NOW) });
+}
 
 const PLACES = ['Haflong', 'Lumding', 'Silchar-side staging', 'Haflong–Ditokcherra link'];
 const fieldsList: AlertFields[] = [];

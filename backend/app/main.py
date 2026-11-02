@@ -8,7 +8,7 @@ import logging
 import re
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Callable, Literal, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, Request
@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import auth
+from . import auth, corridor_data
 from .ai import AIUnavailable, ClaudeAI, Image
 from .domain.alerts import render_template
 from .seed import SAMPLE_PHOTOS
@@ -78,14 +78,23 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
     ai = ai or ClaudeAI(cfg.anthropic_api_key, cfg.ai_model)
     cfg.upload_dir.mkdir(parents=True, exist_ok=True)
 
+    def feed_for(conn) -> Callable[[str], dict]:
+        """Input feed for the real corridor: re-reads terrain, model score and IMD rainfall from PostGIS."""
+        return lambda day: corridor_data.segment_inputs(conn, store.schema, date.fromisoformat(day), clock())
+
     def seed_if_needed() -> None:
         store.init_schema()
         with store.connect() as conn:
             conn.execute("SELECT pg_advisory_xact_lock(%s)", (store.lock_key,))
             if not store.is_seeded(conn):
-                fresh = new_state(clock())
-                Workflow(fresh, clock, cfg.timezone).seed_initial()
+                corridor = None
+                if cfg.corridor_source == "auto":
+                    corridor = corridor_data.load_corridor(conn, store.schema, date.fromisoformat(cfg.scenario_date), clock())
+                fresh = new_state(clock(), corridor)
+                # Segments are not saved yet, so seeding uses the in-memory corridor check (same geometry).
+                Workflow(fresh, clock, cfg.timezone, None, feed_for(conn)).seed_initial()
                 store.save(conn, fresh)
+                log.info("Seeded %s corridor (%s)", "real NH-27" if corridor else "sample", (corridor or {}).get("meta"))
             conn.commit()
 
     @asynccontextmanager
@@ -111,20 +120,20 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
 
     def run(fn: Callable[[Workflow], Any]) -> tuple[Any, list[str]]:
         with store.unit_of_work() as (conn, state):
-            wf = Workflow(state, clock, cfg.timezone, store.corridor_distance(conn))
+            wf = Workflow(state, clock, cfg.timezone, store.corridor_distance(conn), feed_for(conn))
             result = fn(wf)
             return result, list(wf.new_alert_ids)
 
     def ai_available() -> bool:
         with store.connect() as conn:
-            row = conn.execute("SELECT data FROM kv WHERE key = 'config'").fetchone()
+            row = conn.execute(f"SELECT data FROM {store.t('kv')} WHERE key = 'config'").fetchone()
         return ai.enabled and bool(row and row[0].get("aiServiceOnline", True))
 
     def write_alerts_task(alert_ids: list[str]) -> None:
         """FR-28 language-model pass, outside the request transaction. Validation and blocking happen in the service."""
         for alert_id in alert_ids:
             with store.connect() as conn:
-                snap_fields = conn.execute("SELECT data->'fields' FROM alerts WHERE id = %s", (alert_id,)).fetchone()
+                snap_fields = conn.execute(f"SELECT data->'fields' FROM {store.t('alerts')} WHERE id = %s", (alert_id,)).fetchone()
             if not snap_fields:
                 continue
             fields = snap_fields[0]

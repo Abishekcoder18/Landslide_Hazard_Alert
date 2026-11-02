@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Callable, Optional
 from zoneinfo import ZoneInfo
 
@@ -36,28 +37,50 @@ def _open(i: dict) -> bool:
     return i["state"] != "reopened_full"
 
 
-def new_state(now: datetime) -> dict:
+def new_state(now: datetime, corridor: Optional[dict] = None) -> dict:
+    """`corridor` = real NH-27 data from PostGIS (app/corridor_data.load_corridor); None -> 12-segment sample seed."""
     config = copy.deepcopy(DEFAULT_CONFIG)
-    segs = {s["id"]: apply_risk(s, config, now) for s in seed_segments(now)}
+    if corridor:
+        config["scenarioDate"] = corridor["meta"]["scenarioDate"]
+        segs = {s["id"]: apply_risk(s, config, now) for s in corridor["segments"]}
+        zones = copy.deepcopy(corridor["zones"])
+        hps = {h["id"]: copy.deepcopy(h) for h in corridor["holdingPoints"]}
+        meta = copy.deepcopy(corridor["meta"])
+    else:
+        segs = {s["id"]: apply_risk(s, config, now) for s in seed_segments(now)}
+        zones = seed_zones(list(segs.values()), config["approachZoneExtentKm"])
+        hps = {h["id"]: copy.deepcopy(h) for h in SEED_HOLDING_POINTS}
+        meta = {"source": "sample"}
     return {
         "config": config,
         "segments": segs,
-        "zones": seed_zones(list(segs.values()), config["approachZoneExtentKm"]),
-        "holdingPoints": {h["id"]: copy.deepcopy(h) for h in SEED_HOLDING_POINTS},
+        "zones": zones,
+        "holdingPoints": hps,
+        "corridor": meta,
         "reports": [], "incidents": [], "approvals": [], "alerts": [],
         "decisions": {}, "decisionRecords": [], "audit": [], "overrides": {}, "seq": 0,
     }
+
+
+FEED_FIELDS = ("susceptibility", "susceptibilityScore", "modelVersion", "slopeDeg", "rainfall24h", "rainfall3d", "rainfall7d",
+               "rainfallDate", "pastIncidents", "sources")
+DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+IMD_FIRST, IMD_LAST = date(2010, 1, 7), date(2025, 12, 31)  # 7-day totals need 6 earlier days of IMD data
 
 
 class Workflow:
     """All commands mutate `self.s`. `new_alert_ids` lists alerts drafted in this unit of work (for the LLM pass)."""
 
     def __init__(self, state: dict, clock: Callable[[], datetime], tz: str = "Asia/Kolkata",
-                 corridor_distance: Optional[Callable[[float, float], float]] = None):
+                 corridor_distance: Optional[Callable[[float, float], float]] = None,
+                 feed: Optional[Callable[[str], dict]] = None):
         self.s = state
         self.clock = clock
         self.tz = tz
         self.corridor_distance = corridor_distance
+        # Input feed for the real corridor: rainfall date (YYYY-MM-DD) -> {segment id: Risk Index inputs} from PostGIS.
+        self.feed = feed
+        self.s.setdefault("corridor", {"source": "sample"})
         self.new_alert_ids: list[str] = []
 
     # ---------- helpers ----------
@@ -106,8 +129,30 @@ class Workflow:
         return names
 
     # ---------- engine ----------
+    @property
+    def real(self) -> bool:
+        return self.s.get("corridor", {}).get("source") == "postgis"
+
+    def refresh_inputs(self, sids: list[str]) -> bool:
+        """Re-read inputs from PostGIS for the configured rainfall date (keeps officer-set IMD warning / GSI bulletin)."""
+        if not (self.real and self.feed and sids):
+            return False
+        fresh = self.feed(self.s["config"]["scenarioDate"])
+        for sid in sids:
+            if sid in fresh:
+                seg = self.s["segments"][sid]
+                seg["inputs"] = {**seg["inputs"], **{k: fresh[sid].get(k) for k in FEED_FIELDS}, "updatedAt": self.iso(), "sample": False}
+        return True
+
     def seed_initial(self) -> None:
         now = self.now()
+        if self.real:
+            m = self.s["corridor"]
+            self.audit("System", "system", "Corridor data loaded",
+                       f"NH-27 Dima Hasao · {m['segments']} segments · {m['zones']} approach zones · model {m.get('modelVersion')} · "
+                       f"IMD rainfall {m['scenarioDate']}")
+            self.recompute("Initial evaluation")
+            return
         for r in seed_reports(now):
             checks = run_report_checks(r, self.s["reports"], list(self.s["segments"].values()), self.s["config"], now, self.corridor_distance)
             self.s["reports"].insert(0, {**r, "checks": checks, "route": route_report(checks, r["ai"]),
@@ -196,11 +241,12 @@ class Workflow:
                 a["escalatedAt"] = to_iso(now)
                 self.audit("System", "system", "Escalated to second approver",
                            f"{a['id']} not acted on within {self.s['config']['escalationMinutes']} min", entity=a["id"], before="pending", after="escalated")
-        expired = False
-        for sid, seg in list(self.s["segments"].items()):
-            if parse_iso(seg["validUntil"]) < now:
-                self.s["segments"][sid] = apply_risk(seg, self.s["config"], now)
-                expired = True
+        expired = [sid for sid, seg in self.s["segments"].items() if parse_iso(seg["validUntil"]) < now]
+        if self.refresh_inputs(expired):
+            self.audit("Input feed", "system", "Inputs refreshed",
+                       f"{len(expired)} segments · PostGIS · IMD rainfall {self.s['config']['scenarioDate']}")
+        for sid in expired:
+            self.s["segments"][sid] = apply_risk(self.s["segments"][sid], self.s["config"], now)
         if expired:
             self.recompute("Risk Level validity expired (6 h)")
 
@@ -266,6 +312,7 @@ class Workflow:
             "alerts": s["alerts"],
             "audit": s["audit"],
             "config": s["config"],
+            "corridor": s.get("corridor", {"source": "sample"}),
         })
 
     def submit_report(self, session: dict, inp: dict, photo_url: str, ai: Optional[dict], ai_error: Optional[str],
@@ -483,6 +530,19 @@ class Workflow:
         self.guard(session, "configure")
         before = json.dumps(self.s["config"])
         cfg = {**self.s["config"], **{k: v for k, v in patch.items() if k in DEFAULT_CONFIG}}
+        new_day = patch.get("scenarioDate")
+        if new_day is not None:
+            if not self.real:
+                raise ApiError("Rainfall date applies to the real corridor data only")
+            try:
+                if not (isinstance(new_day, str) and DATE_RE.fullmatch(new_day)):
+                    raise ValueError
+                d = date.fromisoformat(new_day)
+            except ValueError as e:
+                raise ApiError("Rainfall date must be YYYY-MM-DD") from e
+            if not (IMD_FIRST <= d <= IMD_LAST):
+                raise ApiError(f"Rainfall date must be between {IMD_FIRST} and {IMD_LAST} (IMD data loaded)")
+            cfg["scenarioDate"] = new_day
         cfg["weights"] = {**self.s["config"]["weights"], **(patch.get("weights") or {})}
         cfg["thresholds"] = {**self.s["config"]["thresholds"], **(patch.get("thresholds") or {})}
         t = cfg["thresholds"]
@@ -490,6 +550,9 @@ class Workflow:
             raise ApiError("Thresholds must increase: Yellow < Orange < Red")
         self.s["config"] = cfg
         self.audit(self.actor(session), session["role"], "Configuration changed", ", ".join(patch.keys()), before=before, after=json.dumps(cfg))
+        if new_day is not None:
+            self.s["corridor"]["scenarioDate"] = new_day
+            self.refresh_inputs(list(self.s["segments"]))
         now = self.now()
         for sid in list(self.s["segments"]):
             self.s["segments"][sid] = apply_risk(self.s["segments"][sid], cfg, now)
@@ -514,7 +577,16 @@ class Workflow:
         seg = self.segment(sid)
         before = f"{seg['riskLevel']} ({seg['riskIndex'] if seg['riskIndex'] is not None else '—'})"
         allowed = {"susceptibility", "slopeDeg", "rainfall24h", "rainfall3d", "rainfall7d", "pastIncidents", "imdWarning", "gsiBulletin"}
-        seg["inputs"] = {**seg["inputs"], **{k: v for k, v in patch.items() if k in allowed}, "updatedAt": self.iso(), "sample": True}
+        clean = {k: v for k, v in patch.items() if k in allowed}
+        data_edit = bool(set(clean) - {"imdWarning", "gsiBulletin"})
+        inputs = {**seg["inputs"], **clean, "updatedAt": self.iso()}
+        if "susceptibility" in clean:
+            inputs["susceptibilityScore"] = None  # a manually set category replaces the model score
+        if data_edit or not self.real:
+            inputs["sample"] = True  # manual values are no longer the data source; shown as Sample data
+            if self.real and any(k.startswith("rainfall") for k in clean):
+                inputs.pop("rainfallDate", None)
+        seg["inputs"] = inputs
         self.s["segments"][sid] = apply_risk(seg, self.s["config"], self.now())
         after = self.s["segments"][sid]
         self.audit(self.actor(session), session["role"], "Inputs updated", f"{sid} · {', '.join(patch.keys())}", entity=sid, before=before,

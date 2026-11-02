@@ -122,6 +122,7 @@ class Store:
             "seq": kv["seq"],
             "decisions": kv.get("decisions", {}),
             "overrides": kv.get("overrides", {}),
+            "corridor": kv.get("corridor", {"source": "sample"}),
             "segments": {s["id"]: s for s in segs},
             "zones": zones,
             "holdingPoints": {h["id"]: h for h in hps},
@@ -134,7 +135,9 @@ class Store:
         }
 
     def save(self, conn: psycopg.Connection, s: dict) -> None:
-        for key in ("config", "seq", "decisions", "overrides"):
+        for key in ("config", "seq", "decisions", "overrides", "corridor"):
+            if key not in s:
+                continue
             conn.execute(f"INSERT INTO {self.t('kv')} (key, data) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data", (key, Jsonb(s[key])))
         with conn.cursor() as cur:
             cur.executemany(

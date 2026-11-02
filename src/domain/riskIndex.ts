@@ -9,6 +9,20 @@ const SUSCEPTIBILITY_SCORE: Record<Susceptibility, number> = {
   'Very Low': 0.1, Low: 0.25, Moderate: 0.5, High: 0.75, 'Very High': 1
 };
 
+/** Category cut-offs on the 0–1 model score (backend/models/model_meta.json `category_cutoffs`). Display only. */
+const SCORE_CUTOFFS: [number, Susceptibility][] = [[0.2, 'Very Low'], [0.4, 'Low'], [0.6, 'Moderate'], [0.8, 'High']];
+
+export function susceptibilityCategory(score: number): Susceptibility {
+  for (const [cut, label] of SCORE_CUTOFFS) if (score < cut) return label;
+  return 'Very High';
+}
+
+/** The model score, when present and valid, replaces the categorical susceptibility in the Risk Index. */
+export function modelScore(inputs: SegmentInputs): number | null {
+  const s = inputs.susceptibilityScore;
+  return typeof s === 'number' && Number.isFinite(s) ? Math.min(1, Math.max(0, s)) : null;
+}
+
 /** Rainfall normalisers (mm at which the component saturates). Configurable later. */
 const RAIN_SATURATION = { h24: 100, d3: 200, d7: 300 };
 const SLOPE_SATURATION_DEG = 45;
@@ -29,7 +43,7 @@ export interface RiskComputation {
 
 export function missingInputs(inputs: SegmentInputs): string[] {
   const missing: string[] = [];
-  if (inputs.susceptibility === null) missing.push('susceptibility');
+  if (inputs.susceptibility === null && modelScore(inputs) === null) missing.push('susceptibility');
   if (inputs.slopeDeg === null) missing.push('slope');
   if (inputs.rainfall24h === null || inputs.rainfall3d === null || inputs.rainfall7d === null) missing.push('rainfall');
   if (inputs.pastIncidents === null) missing.push('past incidents');
@@ -50,12 +64,13 @@ export function computeRisk(inputs: SegmentInputs, config: Config, now: Date = n
     return { riskIndex: null, riskLevel: 'NO_DATA', reasons: [`Inputs stale (${Math.floor(ageHours)} h old)`], computedAt, validUntil };
   }
 
+  const ms = modelScore(inputs);
   const components = [
     {
       key: 'susceptibility',
       weight: config.weights.susceptibility,
-      score: SUSCEPTIBILITY_SCORE[inputs.susceptibility!],
-      reason: `GSI susceptibility ${inputs.susceptibility}`
+      score: ms ?? SUSCEPTIBILITY_SCORE[inputs.susceptibility!],
+      reason: ms !== null ? `Model susceptibility ${ms.toFixed(2)}` : `GSI susceptibility ${inputs.susceptibility}`
     },
     {
       key: 'rainfall',

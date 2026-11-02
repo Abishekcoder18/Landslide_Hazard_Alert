@@ -7,6 +7,26 @@ from .decision_engine import js_round
 from .timeutil import parse_iso, to_iso
 
 SUSCEPTIBILITY_SCORE = {"Very Low": 0.1, "Low": 0.25, "Moderate": 0.5, "High": 0.75, "Very High": 1.0}
+# Category cut-offs on the 0-1 model score (backend/models/model_meta.json category_cutoffs). Display only.
+SCORE_CUTOFFS = [(0.2, "Very Low"), (0.4, "Low"), (0.6, "Moderate"), (0.8, "High")]
+
+
+def susceptibility_category(score: float) -> str:
+    return next((lbl for cut, lbl in SCORE_CUTOFFS if score < cut), "Very High")
+
+
+def model_score(inputs: dict):
+    """The model score, when present and valid, replaces the categorical susceptibility in the Risk Index."""
+    s = inputs.get("susceptibilityScore")
+    if isinstance(s, bool) or not isinstance(s, (int, float)) or s != s or s in (float("inf"), float("-inf")):
+        return None
+    return min(1.0, max(0.0, float(s)))
+
+
+def _fixed2(x: float) -> str:
+    """JavaScript Number.prototype.toFixed(2) (rounds the exact binary value half away from zero)."""
+    from decimal import ROUND_HALF_UP, Decimal
+    return str(Decimal(x).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 RAIN_SATURATION = {"h24": 100, "d3": 200, "d7": 300}
 SLOPE_SATURATION_DEG = 45
 HISTORY_SATURATION = 5
@@ -21,7 +41,7 @@ def _max_level(a: str, b: str) -> str:
 
 def missing_inputs(inputs: dict) -> list[str]:
     missing = []
-    if inputs.get("susceptibility") is None:
+    if inputs.get("susceptibility") is None and model_score(inputs) is None:
         missing.append("susceptibility")
     if inputs.get("slopeDeg") is None:
         missing.append("slope")
@@ -50,7 +70,9 @@ def compute_risk(inputs: dict, config: dict, now: datetime) -> dict:
 
     w = config["weights"]
     pi = inputs["pastIncidents"]
+    ms = model_score(inputs)
     components = [
+        (w["susceptibility"], ms, f"Model susceptibility {_fixed2(ms)}") if ms is not None else
         (w["susceptibility"], SUSCEPTIBILITY_SCORE[inputs["susceptibility"]], f"GSI susceptibility {inputs['susceptibility']}"),
         (w["rainfall"], min(1.0, max(inputs["rainfall24h"] / RAIN_SATURATION["h24"], inputs["rainfall3d"] / RAIN_SATURATION["d3"], inputs["rainfall7d"] / RAIN_SATURATION["d7"])),
          f"Rain 24h {_num(inputs['rainfall24h'])} mm · 3d {_num(inputs['rainfall3d'])} mm"),

@@ -22,7 +22,15 @@ export type ImdWarning = 'NONE' | 'YELLOW' | 'ORANGE' | 'RED';
 
 /** FR-02 inputs. `null` = missing (BR-06). */
 export interface SegmentInputs {
+  /** Category label. With a model score it is derived from the score (display only). */
   susceptibility: Susceptibility | null;
+  /** 0–1 landslide susceptibility from the trained model; replaces the category in the Risk Index when present. */
+  susceptibilityScore?: number | null;
+  modelVersion?: string;
+  /** Date of the IMD rainfall used (historical scenario), e.g. "2022-05-15". Absent for sample values. */
+  rainfallDate?: string;
+  /** Short source labels shown in the segment drawer. */
+  sources?: { terrain?: string; rainfall?: string; history?: string };
   slopeDeg: number | null;
   rainfall24h: number | null;
   rainfall3d: number | null;

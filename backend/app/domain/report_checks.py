@@ -42,10 +42,14 @@ def run_report_checks(
 ) -> dict:
     seg_known = any(s["id"] == report["segmentId"] for s in segments)
     distance = None
+    unreachable = False  # no corridor geometry to measure against (TS: Infinity -> outside, serialised as null)
     if report.get("lat") is not None and report.get("lon") is not None:
         d = corridor_distance(report["lat"], report["lon"]) if corridor_distance else distance_to_corridor_km((report["lat"], report["lon"]), segments)
-        distance = math.floor(d * 100 + 0.5) / 100
-    inside = seg_known and (distance is None or distance <= config["corridorBufferKm"])
+        if math.isfinite(d):
+            distance = math.floor(d * 100 + 0.5) / 100
+        else:
+            unreachable = True
+    inside = seg_known and not unreachable and (distance is None or distance <= config["corridorBufferKm"])
 
     age_minutes = max(0, int(math.floor((now - parse_iso(report["capturedAt"])).total_seconds() / 60 + 0.5)))
     recent = age_minutes <= config["reportMaxAgeMinutes"]
