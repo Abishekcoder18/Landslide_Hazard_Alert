@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeRisk, effectiveRiskLevel, applyRisk } from './riskIndex';
+import { computeRisk, effectiveRiskLevel, applyRisk, susceptibilityCategory } from './riskIndex';
 import { DEFAULT_CONFIG } from './config';
 import { SegmentInputs, Segment } from '../types';
 
@@ -54,4 +54,29 @@ test('BR-12: an expired Risk Level displays as No data', () => {
   const s = applyRisk({ inputs: base() } as Segment, DEFAULT_CONFIG, NOW);
   assert.equal(effectiveRiskLevel(s, NOW), 'GREEN');
   assert.equal(effectiveRiskLevel(s, new Date(NOW.getTime() + 7 * 3600_000)), 'NO_DATA');
+});
+
+test('F1 model: susceptibilityScore replaces the category in the Risk Index and is shown as a reason', () => {
+  const cat = computeRisk(base({ susceptibility: 'Low', slopeDeg: 30, rainfall3d: 150, pastIncidents: 3 }), DEFAULT_CONFIG, NOW);
+  const model = computeRisk(base({ susceptibility: 'Low', susceptibilityScore: 0.92, slopeDeg: 30, rainfall3d: 150, pastIncidents: 3 }), DEFAULT_CONFIG, NOW);
+  assert.ok(model.riskIndex! > cat.riskIndex!);
+  // 0.92 vs Low (0.25) with weight 35/100 -> +23.45 points before rounding each index separately
+  assert.ok([23, 24].includes(model.riskIndex! - cat.riskIndex!));
+  assert.ok(model.reasons.includes('Model susceptibility 0.92'));
+  assert.ok(!model.reasons.some(r => r.startsWith('GSI susceptibility')));
+});
+
+test('F1 model: score alone counts as the susceptibility input (BR-06); out-of-range scores are clamped', () => {
+  assert.notEqual(computeRisk(base({ susceptibility: null, susceptibilityScore: 0.4 }), DEFAULT_CONFIG, NOW).riskLevel, 'NO_DATA');
+  assert.equal(computeRisk(base({ susceptibility: null, susceptibilityScore: null }), DEFAULT_CONFIG, NOW).riskLevel, 'NO_DATA');
+  const hi = computeRisk(base({ susceptibilityScore: 1.7, slopeDeg: 45, rainfall24h: 100, pastIncidents: 5 }), DEFAULT_CONFIG, NOW);
+  assert.equal(hi.riskIndex, 100);
+});
+
+test('F1 model: category label derived from the score with the model cut-offs', () => {
+  assert.equal(susceptibilityCategory(0.05), 'Very Low');
+  assert.equal(susceptibilityCategory(0.2), 'Low');
+  assert.equal(susceptibilityCategory(0.59), 'Moderate');
+  assert.equal(susceptibilityCategory(0.6), 'High');
+  assert.equal(susceptibilityCategory(0.8), 'Very High');
 });

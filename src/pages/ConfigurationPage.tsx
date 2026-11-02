@@ -47,6 +47,23 @@ const ConfigForm: React.FC = () => {
             <NumField label="Validity" unit="h" value={c.validityHours} onChange={v => set('validityHours', v)} />
             <NumField label="Stale input after" unit="h" value={c.staleInputHours} onChange={v => set('staleInputHours', v)} />
           </div>
+          {snap.corridor?.source === 'postgis' && c.scenarioDate && (
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-1">IMD rainfall date</span>
+              <span className="flex items-center gap-2">
+                <input
+                  type="date"
+                  aria-label="IMD rainfall date"
+                  className={`${inputClass} !w-44`}
+                  min="2010-01-07"
+                  max="2025-12-31"
+                  value={c.scenarioDate}
+                  onChange={e => e.target.value && set('scenarioDate', e.target.value)}
+                />
+                <Pill tone="grey">IMD gridded 0.25°</Pill>
+              </span>
+            </label>
+          )}
         </div>
       </Card>
 
@@ -132,7 +149,10 @@ const InputRow: React.FC<{ seg: Segment }> = ({ seg }) => {
   const [v, setV] = useState<SegmentInputs>(seg.inputs);
   useEffect(() => setV(seg.inputs), [seg.inputs]);
   const keys: (keyof SegmentInputs)[] = ['susceptibility', 'slopeDeg', 'rainfall24h', 'rainfall3d', 'rainfall7d', 'pastIncidents', 'imdWarning', 'gsiBulletin'];
-  const dirty = keys.some(k => v[k] !== seg.inputs[k]);
+  const changed = keys.filter(k => v[k] !== seg.inputs[k]);
+  const dirty = changed.length > 0;
+  // Send only the edited fields, so e.g. an IMD warning change keeps the model score and real data.
+  const patch = Object.fromEntries(changed.map(k => [k, v[k]])) as Partial<SegmentInputs>;
   const num = (k: 'slopeDeg' | 'rainfall24h' | 'rainfall3d' | 'rainfall7d' | 'pastIncidents') => (
     <input
       aria-label={`${seg.id} ${k}`}
@@ -148,10 +168,15 @@ const InputRow: React.FC<{ seg: Segment }> = ({ seg }) => {
         <span className="font-mono mr-1">{seg.id}</span>
       </Td>
       <Td>
-        <select aria-label={`${seg.id} susceptibility`} className={`${inputClass} !h-8 !w-28`} value={v.susceptibility ?? ''} onChange={e => setV({ ...v, susceptibility: (e.target.value || null) as Susceptibility | null })}>
-          <option value="">—</option>
-          {SUSC.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <span className="inline-flex items-center gap-1.5">
+          <select aria-label={`${seg.id} susceptibility`} className={`${inputClass} !h-8 !w-28`} value={v.susceptibility ?? ''} onChange={e => setV({ ...v, susceptibility: (e.target.value || null) as Susceptibility | null })}>
+            <option value="">—</option>
+            {SUSC.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {typeof seg.inputs.susceptibilityScore === 'number' && (
+            <span className="font-mono text-xs text-[#6B7280]" title={seg.inputs.modelVersion}>{seg.inputs.susceptibilityScore.toFixed(2)}</span>
+          )}
+        </span>
       </Td>
       <Td>{num('slopeDeg')}</Td>
       <Td>{num('rainfall24h')}</Td>
@@ -171,7 +196,7 @@ const InputRow: React.FC<{ seg: Segment }> = ({ seg }) => {
         </span>
       </Td>
       <Td className="text-right">
-        <Button size="sm" disabled={!dirty} onClick={() => act(s => api.updateSegmentInputs(s, seg.id, v), `${seg.id} recomputed`)}>
+        <Button size="sm" disabled={!dirty} onClick={() => act(s => api.updateSegmentInputs(s, seg.id, patch), `${seg.id} recomputed`)}>
           Save
         </Button>
       </Td>
@@ -251,7 +276,10 @@ export const ConfigurationPage: React.FC = () => {
 
         {tab === 'inputs' && (
           <Card className="overflow-x-auto">
-            <CardHeader title="Segment inputs" right={<SampleTag />} />
+            <CardHeader
+              title="Segment inputs"
+              right={snap.segments.some(s => s.inputs.sample) ? <SampleTag /> : <Pill tone="grey">PostGIS · IMD {snap.config.scenarioDate}</Pill>}
+            />
             <table className="w-full">
               <thead className="bg-[#FAF8F3] border-b border-[#E7E3DA]">
                 <tr><Th>Segment</Th><Th>Susceptibility</Th><Th>Slope °</Th><Th>24h mm</Th><Th>3d mm</Th><Th>7d mm</Th><Th>Incidents</Th><Th>IMD</Th><Th>GSI</Th><Th>Risk</Th><Th /></tr>
@@ -262,9 +290,15 @@ export const ConfigurationPage: React.FC = () => {
         )}
 
         <div className="flex justify-end">
-          <Button variant="danger" icon={<RotateCcw className="w-4 h-4" />} onClick={() => act(s => api.resetSampleData(s), 'Sample data reset')}>
-            Reset sample data
-          </Button>
+          {snap.corridor?.source === 'postgis' ? (
+            <Button variant="danger" icon={<RotateCcw className="w-4 h-4" />} onClick={() => act(s => api.resetSampleData(s), 'Corridor data reloaded')}>
+              Reload corridor data
+            </Button>
+          ) : (
+            <Button variant="danger" icon={<RotateCcw className="w-4 h-4" />} onClick={() => act(s => api.resetSampleData(s), 'Sample data reset')}>
+              Reset sample data
+            </Button>
+          )}
         </div>
       </PageBody>
     </div>

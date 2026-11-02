@@ -6,6 +6,13 @@ import { DecisionChip, IncidentBadge, RiskBadge, RoadStateBadge, SampleTag } fro
 import { Row } from './ui';
 import { fmtAgo, fmtRemaining, fmtTime } from '../lib/format';
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "2022-05-15" -> "15 May 2022" (calendar date, no time-zone shift). */
+const fmtDay = (d: string) => {
+  const [y, m, day] = d.split('-').map(Number);
+  return y && m && day ? `${day} ${MONTHS[m - 1]} ${y}` : d;
+};
+
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="space-y-1.5">
     <div className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">{title}</div>
@@ -72,17 +79,38 @@ export const SegmentDrawer: React.FC<{ segmentId: string | null; onClose: () => 
 
           <Section title="Inputs">
             <div className="rounded-lg border border-[#E7E3DA] divide-y divide-[#E7E3DA]">
-              <Row label="GSI susceptibility">{i.susceptibility ?? <span className="text-[#9B2C2C]">Missing</span>}</Row>
+              {typeof i.susceptibilityScore === 'number' ? (
+                <>
+                  <Row label="Model susceptibility">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="font-mono">{i.susceptibilityScore.toFixed(2)}</span>
+                      <span className="text-[#6B7280]">{i.susceptibility}</span>
+                    </span>
+                  </Row>
+                  {i.modelVersion && <Row label="Model"><span className="font-mono text-xs">{i.modelVersion}</span></Row>}
+                </>
+              ) : (
+                <Row label="GSI susceptibility">{i.susceptibility ?? <span className="text-[#9B2C2C]">Missing</span>}</Row>
+              )}
               <Row label="Slope">{v(i.slopeDeg, '°')}</Row>
               <Row label="Rain 24h / 3d / 7d">
                 <span className="font-mono">{v(i.rainfall24h)} / {v(i.rainfall3d)} / {v(i.rainfall7d)} mm</span>
               </Row>
-              <Row label="Past incidents">{v(i.pastIncidents)}</Row>
+              {i.rainfallDate && <Row label="Rainfall date"><span className="font-mono">IMD · {fmtDay(i.rainfallDate)}</span></Row>}
+              <Row label={i.sources?.history ? 'Past landslides ≤ 500 m' : 'Past incidents'}>{v(i.pastIncidents)}</Row>
               <Row label="IMD warning">{i.imdWarning === 'NONE' ? 'None' : i.imdWarning}</Row>
               <Row label="GSI bulletin">{i.gsiBulletin ? 'Yes' : 'None'}</Row>
               <Row label="Updated">{fmtAgo(i.updatedAt, now)}</Row>
             </div>
-            {i.sample && <SampleTag />}
+            {i.sample ? (
+              <SampleTag />
+            ) : i.sources ? (
+              <div className="flex flex-wrap gap-1.5">
+                {[i.sources.terrain, i.sources.rainfall, i.sources.history].filter(Boolean).map(s => (
+                  <span key={s} className="px-2 py-0.5 rounded-md text-[11px] text-[#6B7280] bg-[#FAF8F3] border border-[#E7E3DA]">{s}</span>
+                ))}
+              </div>
+            ) : null}
           </Section>
 
           {zones.length > 0 && (

@@ -146,8 +146,11 @@ const ReportsTable: React.FC<{ reports: Report[]; actions?: boolean }> = ({ repo
 
 const NewReportForm: React.FC = () => {
   const { act, snapshot } = useApp();
-  const { segments } = useCorridor();
-  const [segmentId, setSegmentId] = useState('S-07');
+  const { snap, segments } = useCorridor();
+  // Default: S-07 in sample data; on the real corridor the first segment that has approach zones.
+  const [segmentId, setSegmentId] = useState(() =>
+    segments['S-07'] ? 'S-07' : snap.zones[0]?.segmentId ?? Object.keys(segments)[0] ?? ''
+  );
   const [locationText, setLocationText] = useState('');
   const [lat, setLat] = useState('');
   const [lon, setLon] = useState('');

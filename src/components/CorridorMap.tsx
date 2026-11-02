@@ -31,6 +31,13 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const layersGroupRef = useRef<L.FeatureGroup | null>(null);
+  const fittedKeyRef = useRef<string>('');
+  const segList = Object.values(segments);
+  // Real corridor = 137 x ~1 km segments: segment labels only for the selected or blocked ones.
+  const many = segList.length > 20;
+  const kmFrom = segList.length ? Math.min(...segList.map(s => s.startKm)) : 0;
+  const kmTo = segList.length ? Math.max(...segList.map(s => s.endKm)) : 0;
+  const shortId = (id: string) => id.replace(/^.*-0*(?=\d)/, '');
   const [viewMode, setViewMode] = useState<'osm' | 'schematic'>('osm');
   const [tilesLoadedFailed, setTilesLoadedFailed] = useState<boolean>(false);
 
@@ -128,9 +135,11 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
           </div>`
         });
 
-        const marker = L.marker(seg.center, { icon: markerIcon });
-        marker.on('click', () => handleSegmentClick(seg.id));
-        marker.addTo(group);
+        if (!many || isSelected || isBlocked) {
+          const marker = L.marker(seg.center, { icon: markerIcon });
+          marker.on('click', () => handleSegmentClick(seg.id));
+          marker.addTo(group);
+        }
       });
 
       // Render Safe Holding Points
@@ -184,6 +193,14 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
         );
         circle.addTo(group);
       });
+
+      // Fit the view to the corridor geometry once per segment set (sample or real NH-27 data).
+      const key = Object.keys(segments).join(',');
+      if (key && fittedKeyRef.current !== key) {
+        const pts = Object.values(segments).flatMap(s => s.coordinates) as L.LatLngExpression[];
+        if (pts.length) map.fitBounds(L.latLngBounds(pts), { padding: [24, 24] });
+        fittedKeyRef.current = key;
+      }
     }
   }, [viewMode, segments, holdingPoints, zones, selectedSegmentId]);
 
@@ -250,13 +267,13 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
                 Corridor schematic · NH-27 Dima Hasao
               </span>
               <span className="text-xs text-[#6B7280] font-mono">
-                110–222 km (112 km)
+                km {kmFrom}–{kmTo} ({Math.round((kmTo - kmFrom) * 10) / 10} km)
               </span>
             </div>
 
             <div className="relative py-8 px-4 bg-white rounded-lg border border-[#E7E3DA]">
-              <div className="flex items-center justify-between relative">
-                <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-1.5 bg-[#E7E3DA] rounded-full z-0"></div>
+              <div className={many ? 'grid grid-cols-[repeat(auto-fill,minmax(30px,1fr))] gap-y-5 gap-x-1 pt-4' : 'flex items-center justify-between relative'}>
+                {!many && <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-1.5 bg-[#E7E3DA] rounded-full z-0"></div>}
 
                 {Object.values(segments).map(seg => {
                   const color = MAP_LINE_COLORS[seg.riskLevel] || '#9CA3AF';
@@ -277,7 +294,7 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
                       ))}
 
                       <div
-                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold border-2 transition-transform group-hover:scale-110 ${
+                        className={`${many ? 'w-7 h-6 rounded text-[9px]' : 'w-6 h-6 rounded-full text-[10px]'} flex items-center justify-center font-semibold border-2 transition-transform group-hover:scale-110 ${
                           isSelected ? 'ring-2 ring-[#3780C8]' : ''
                         }`}
                         style={{
@@ -286,14 +303,16 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
                           color: '#FFFFFF'
                         }}
                       >
-                        {seg.id.replace('S-', '')}
+                        {shortId(seg.id)}
                       </div>
 
-                      <div className="mt-1 text-center">
-                        <span className="block text-[10px] font-medium text-[#1F2933]">
-                          {seg.id}
-                        </span>
-                      </div>
+                      {!many && (
+                        <div className="mt-1 text-center">
+                          <span className="block text-[10px] font-medium text-[#1F2933]">
+                            {seg.id}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

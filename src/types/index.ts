@@ -303,6 +303,18 @@ export interface Config {
   escalationMinutes: number;
   retentionDays: number;
   aiServiceOnline: boolean;
+  /** Real corridor only: date of the IMD rainfall used for the rainfall inputs (YYYY-MM-DD). */
+  scenarioDate?: string;
+}
+
+/** Where the corridor data comes from (backend snapshot). Absent or 'sample' = 12-segment sample seed. */
+export interface CorridorMeta {
+  source: 'postgis' | 'sample';
+  scenarioDate?: string;
+  segments?: number;
+  zones?: number;
+  modelVersion?: string | null;
+  modelCv?: { roc_auc_mean: number; roc_auc_std: number; pr_auc_mean: number; pr_auc_std: number } | null;
 }
 
 export interface Session {
@@ -325,4 +337,5 @@ export interface Snapshot {
   alerts: Alert[];
   audit: AuditEntry[];
   config: Config;
+  corridor?: CorridorMeta;
 }

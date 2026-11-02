@@ -221,6 +221,15 @@ class Workflow:
                 ctype = "HEAVY_ONLY" if seg["roadState"] == "RESTRICTED_HEAVY" else "ONE_WAY" if seg["roadState"] == "RESTRICTED_ONE_WAY" else "FULL"
                 self.create_approval(kind="closure", segmentId=sid, incidentId=inc["id"] if inc else None, closureType=ctype,
                                      reason=f"{seg['roadState']} · {effective[sid]['riskLevel']}")
+        # A pending CLOSE recommendation is withdrawn once the rules no longer recommend it (e.g. rainfall fell).
+        # Withdrawal is not an approval: only an officer can approve a closure (BR-08).
+        for a in self.s["approvals"]:
+            if a["kind"] == "closure" and a["status"] in ("pending", "escalated") and a["segmentId"] not in recommended:
+                before = a["status"]
+                a.update(status="rejected", decidedBy="Decision engine", decidedAt=self.iso())
+                level = effective.get(a["segmentId"], {}).get("riskLevel", "—")
+                self.audit("Decision engine", "system", "CLOSE recommendation withdrawn", f"{a['segmentId']} · {level}",
+                           entity=a["id"], before=before, after="rejected")
 
     def create_approval(self, **a) -> dict:
         now = self.now()
@@ -531,6 +540,8 @@ class Workflow:
         before = json.dumps(self.s["config"])
         cfg = {**self.s["config"], **{k: v for k, v in patch.items() if k in DEFAULT_CONFIG}}
         new_day = patch.get("scenarioDate")
+        if new_day is not None and new_day == self.s["config"].get("scenarioDate"):
+            new_day = None  # unchanged (the form sends the whole configuration)
         if new_day is not None:
             if not self.real:
                 raise ApiError("Rainfall date applies to the real corridor data only")
@@ -577,7 +588,8 @@ class Workflow:
         seg = self.segment(sid)
         before = f"{seg['riskLevel']} ({seg['riskIndex'] if seg['riskIndex'] is not None else '—'})"
         allowed = {"susceptibility", "slopeDeg", "rainfall24h", "rainfall3d", "rainfall7d", "pastIncidents", "imdWarning", "gsiBulletin"}
-        clean = {k: v for k, v in patch.items() if k in allowed}
+        # Only fields whose value actually changes count as an edit (clients may send the whole input set).
+        clean = {k: v for k, v in patch.items() if k in allowed and seg["inputs"].get(k) != v}
         data_edit = bool(set(clean) - {"imdWarning", "gsiBulletin"})
         inputs = {**seg["inputs"], **clean, "updatedAt": self.iso()}
         if "susceptibility" in clean:

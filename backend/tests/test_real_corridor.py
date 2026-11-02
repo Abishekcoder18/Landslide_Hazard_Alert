@@ -101,6 +101,14 @@ def test_f1_rainfall_date_switch_raises_risk(env):
     assert storm.get("RED", 0) > calm.get("RED", 0)
     assert all(x["inputs"]["rainfallDate"] == "2022-05-15" for x in s["segments"])
     assert s["config"]["scenarioDate"] == "2022-05-15" and s["corridor"]["scenarioDate"] == "2022-05-15"
+    storm_closures = [a["id"] for a in s["approvals"] if a["kind"] == "closure" and a["status"] == "pending"]
+    assert storm_closures  # Red zone segments -> CLOSE recommended for officer approval (FR-12)
+    # Back to the calm day: recommendations the rules no longer support are withdrawn, never approved by the system.
+    assert client.patch("/api/config", json={"scenarioDate": "2022-05-10"}, headers=admin).status_code == 204
+    s = snap(client, off)
+    by_id = {a["id"]: a for a in s["approvals"]}
+    assert all(by_id[i]["status"] == "rejected" and by_id[i]["decidedBy"] == "Decision engine" for i in storm_closures)
+    assert sum(a["action"] == "CLOSE recommendation withdrawn" for a in s["audit"]) == len(storm_closures)
     assert client.patch("/api/config", json={"scenarioDate": "2030-01-01"}, headers=admin).status_code == 400
     assert client.patch("/api/config", json={"scenarioDate": "15-05-2022"}, headers=admin).status_code == 400
     assert client.patch("/api/config", json={"scenarioDate": "2022-05-14"}, headers=off).status_code == 403
