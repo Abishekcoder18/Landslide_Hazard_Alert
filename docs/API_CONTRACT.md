@@ -65,3 +65,21 @@ mode is unchanged):
   slope, rainfall, history) marks the segment `sample: true` (and a manual category drops the model score); setting only
   `imdWarning` / `gsiBulletin` keeps the real data.
 - Segment IDs `NH27-DH-001…137`; zones `AZ-<nnn>S` (southbound, before the segment) and `AZ-<nnn>N` (northbound).
+
+## Changes 2026-11 (owner decisions)
+
+| Where | Field / value | Meaning |
+|---|---|---|
+| `Approval.status` | `"withdrawn"` | a CLOSE recommendation the rules no longer support, withdrawn by the decision engine (`decidedBy: "Decision engine"`, audit "CLOSE recommendation withdrawn"). Cannot be approved. Replaces the earlier use of `"rejected"` for this case. |
+| `DEFAULT_CONFIG.weights` | 25 / 45 / 15 / 15 | susceptibility / rainfall / slope / history (thresholds unchanged) |
+| `Snapshot.zones` | 274 on the real corridor | two per segment: `AZ-<nnn>S` (southbound, before the segment) and `AZ-<nnn>N` (northbound, after it) |
+| `SafeHoldingPoint.capacityVehicles` | `number \| null` | null = unknown (OSM has no capacity); never invented |
+| `SafeHoldingPoint.source`, `.verified`, `.lat`, `.lon` | optional | e.g. `osm:245731951`; `verified` false until the district confirms; real location for the map |
+| `SegmentInputs.imdWarningSource` | optional string | `"SACHET <alert id> · <source> · until <time>"` when set by the SACHET feed, `"Officer"` when set in Configuration |
+| `AiClassification.model` | `"local:<model>"` | the optional Ollama provider; the UI shows "Local model" (Claude model ids show "Claude") |
+| `Alert.writerModel` | optional string | model that wrote the alert texts (same labelling) |
+
+- **SACHET feed** (`FEEDS_ENABLED=true`, real corridor only): every `SACHET_POLL_MINUTES` the backend reads NDMA SACHET's
+  public alert list; the highest IMD colour in effect for Dima Hasao sets `imdWarning` on every segment. It can raise an
+  officer-set warning but never lowers one, and clears only warnings it set itself. BR-05 / BR-11 apply unchanged.
+- **API responses are gzip-compressed** when the client sends `Accept-Encoding: gzip` (snapshot ~570 KB → ~48 KB).

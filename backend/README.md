@@ -117,3 +117,32 @@ Browser walkthrough of F1 → F3 → F2 on the real corridor (backend on :8000, 
 backend\.venv-data\Scripts\python.exe -m playwright install chromium
 backend\.venv-data\Scripts\python.exe backend\scripts\e2e_walkthrough.py   # screenshots docs/evidence/30-42
 ```
+
+## Live IMD warnings (NDMA SACHET)
+
+`FEEDS_ENABLED=true` in `backend/.env` starts a 30-minute poll (`SACHET_POLL_MINUTES`) of the public SACHET alert list
+(`https://sachet.ndma.gov.in/cap_public_website/FetchAllAlertDetails`; RSS / CAP 1.2: `.../rss/rss_india.xml`). No key.
+Only alerts in effect, from IMD or the Assam SDMA, of a rainfall/thunderstorm/landslide type and naming Dima Hasao count;
+the colour is SACHET's own `severity_color`. Parser and rules: `app/sachet.py`, tests `tests/test_sachet.py` on real
+samples in `inputs/sachet_sample.xml|json`. GSI bulletins stay manual (no API).
+
+## Optional free local model (Ollama)
+
+Only when `ANTHROPIC_API_KEY` is empty: set `AI_PROVIDER=ollama` (and optionally `OLLAMA_MODEL`, default
+`qwen2.5vl:7b`, `OLLAMA_URL`, `OLLAMA_TIMEOUT_S`). Install Ollama from https://ollama.com, then `ollama pull qwen2.5vl:7b`
+(about 6 GB). Same prompts, labels and fail-safe behaviour as Claude (`app/ai_local.py`); results are stored as
+`local:<model>` and shown as "Local model". Prompt log: `docs/AI_PROMPT_LOG.md`.
+
+## Holding points and other inputs
+
+- `scripts/holding_points_osm.py` → `inputs/holding_points.csv` (OSM candidates within 300 m of NH-27, verified=no),
+  then `scripts/segment_nh27.py` snaps them and rebuilds the 274 zones' BR-04 chains.
+- `inputs/incidents.csv`: NH-27 incidents with source URLs (for the back-test; owner check pending).
+- `inputs/translations_review.csv` (`npx tsx scripts/translation-sheet.ts`): template lines for native-speaker review.
+- `scripts/scenario_report.py <dates>`: segments per level and zone decisions for IMD rainfall dates (read only).
+- `scripts/measure_perf.py`: snapshot size / latency and page load.
+
+## Not set up yet
+
+- **OSRM diversions:** Docker Desktop is installed but its engine was not running; building OSRM for the North-Eastern
+  Zone needs several GB of RAM. Start Docker Desktop first.

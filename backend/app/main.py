@@ -89,10 +89,14 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
         """Input feed for the real corridor: re-reads terrain, model score and IMD rainfall from PostGIS."""
         return lambda day: corridor_data.segment_inputs(conn, store.schema, date.fromisoformat(day), clock())
 
-    def seed_if_needed() -> None:
+    def seed_if_needed(wipe: bool = False) -> None:
+        """Seed (optionally after wiping) in ONE transaction under the corridor lock, so no request or feed ever sees
+        an empty state between the wipe and the new seed."""
         store.init_schema()
         with store.connect() as conn:
             conn.execute("SELECT pg_advisory_xact_lock(%s)", (store.lock_key,))
+            if wipe:
+                store.wipe(conn)
             if not store.is_seeded(conn):
                 corridor = None
                 if cfg.corridor_source == "auto":
@@ -273,10 +277,7 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
             wf.guard(sess, "configure")
 
         run(do)
-        with store.connect() as conn:
-            store.wipe(conn)
-            conn.commit()
-        seed_if_needed()
+        seed_if_needed(wipe=True)
 
     return app
 

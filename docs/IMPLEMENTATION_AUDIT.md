@@ -124,6 +124,25 @@ Delegated by the owner (Abishek) and implemented as stated; BR-01..BR-12 are unc
 4. **Optional free local model (Ollama)** may stand in for the photo check and alert writer when no
    `ANTHROPIC_API_KEY` is set, always labelled "Local model", never "Claude". This changes PRD §9 (model) for that case.
 
+## Real-data strengthening, phase status (2026-11-03)
+
+| Phase | Status | Evidence |
+|---|---|---|
+| 1 Weights 25/45/15/15, two zones per segment, "withdrawn" status, tests | Done | table above; `test_real_corridor.py` (every Red/Orange segment has zones; no HOLD on the dry date), `server.test.ts` (withdrawal) |
+| 2 Holding points from OSM | Done — 5 OSM candidates + 2 corridor ends, all Provisional / verified=no; no fuel station within 300 m; Haflong town centre 3.6 km off NH-27 | `backend/inputs/holding_points.csv` |
+| 3 Real incidents | Done — 12 rows with source URLs (2 excluded from the back-test); **awaiting owner "incidents OK"** | `backend/inputs/incidents.csv` |
+| 4 Open-Meteo rainfall (archive + live) | Not started — waits for "incidents OK" as instructed | — |
+| 5 Back-test | Not started — needs Phases 3–4 | — |
+| 6 SACHET IMD warnings | Done — public feed works; parser tested on real samples; raise-only into `imdWarning` | `backend/app/sachet.py`, `backend/tests/test_sachet.py`, `backend/inputs/sachet_sample.*` |
+| 7 AI provider / photo evaluation | Partial — local provider + labels done and tested with a stub; `qwen2.5vl:7b` download failed (DNS); photo set script not run (owner decision pending); no real-model evaluation | `backend/app/ai_local.py`, `docs/AI_PROMPT_LOG.md` |
+| 8 OSRM diversions | Blocked — Docker installed but engine not running; not started on this low-memory laptop without the owner | — |
+| 9 Translation review sheet | Done — 45 rows | `backend/inputs/translations_review.csv` |
+| 10 Verify and document | Done for the completed phases | `docs/evidence/verification-2026-11-03.txt` |
+
+Status changes from this round: **AC-09 / ST-08** BR-04 chains now use OSM-derived candidates on all 274 zones;
+**AC-04 / ST-02** IMD warnings can come from the live SACHET feed (labelled with alert ID); **AC-10 / ST-09** stale CLOSE
+recommendations get status "withdrawn". AC-14, AC-19, AC-21 still tested with a stand-in model only.
+
 ## Contradictions / decisions to note
 
 - **Risk Index calibration on real data (owner decision).** With the default weights 35/30/20/15 and thresholds 30/55/75,

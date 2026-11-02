@@ -1,0 +1,86 @@
+RESILION 2.0 verification - 2026-11-03 03.04 - branch claude/jolly-shannon-vm5au7 @ 828e215 (+ uncommitted docs)
+
+== npm test
+# tests 47
+# pass 47
+# fail 0
+== npm run lint
+> tsc --noEmit
+
+== npm run build
+(!) Some chunks are larger than 500 kB after minification. Consider:
+✓ built in 634ms
+== backend pytest (.venv, incl. parity, real corridor, SACHET, local AI)
+65 passed, 2 skipped, 1 warning in 78.15s (0:01:18)
+== backend data tests (.venv-data)
+10 passed in 14.54s
+== scenario replay (IMD historical dates)
+| IMD rainfall date | Green | Yellow | Orange | Red | No data | Zones HOLD | Zones GO caution | Zones GO | CLOSE recommended |
+|---|---|---|---|---|---|---|---|---|---|
+| 2022-03-20 | 90 | 47 | 0 | 0 | 0 | 0 | 94 | 180 | 0 |
+| 2022-05-10 | 62 | 72 | 3 | 0 | 0 | 6 | 144 | 124 | 0 |
+| 2022-05-13 | 43 | 48 | 36 | 10 | 0 | 92 | 96 | 86 | 10 |
+| 2022-05-15 | 31 | 51 | 23 | 32 | 0 | 110 | 102 | 62 | 32 |
+== RESILION 1 data check
+checked 11 tables outside resilion2*: UNCHANGED
+== browser walkthrough (real corridor, IMD historical date)
+F1 Segment Risk Map
+  screenshot 30-real-corridor-map.png
+  screenshot 31-segment-drawer-model-score.png
+  screenshot 32-config-imd-rainfall-date.png
+  screenshot 33-real-corridor-15-may-2022.png
+  RED segments: 15 May 2022 = 32, 10 May 2022 = 0
+F3 Verified Ground Reports
+  screenshot 34-report-submitted-real-segment.png
+  report REP-0715 segment NH27-DH-108 route manual_review inside corridor True distance 0.0 km (PostGIS)
+  screenshot 35-officer-review-real.png
+F2 Safe Passage and Closure Engine
+  screenshot 36-decisions-real-hold.png
+  AZ-108S: HOLD · Jatinga Tourist Rest House · close recommended True · R-BLOCKED-RED-HOLD
+  AZ-108N: HOLD · Silchar side · close recommended True · R-BLOCKED-RED-HOLD
+  screenshot 37-closure-approval-real.png
+  screenshot 38-alert-approval-real.png
+  screenshot 39-cap-real.png
+  screenshot 40-incident-estimate-real.png
+  screenshot 41-decisions-expected-wait-real.png
+  screenshot 42-records-real.png
+final: NH27-DH-108 road state OPEN; alerts ['ALR-0735 REOPEN draft CAP=no', 'ALR-0724 CLOSE approved CAP=yes']; decision records 616; audit entries 81
+browser API calls 62, failed 0: []
+console/page errors 0: []
+== performance
+on the wire with Accept-Encoding gzip: 56 KB (Content-Encoding: gzip)
+snapshot: 137 segments, 274 zones, 274 decisions, 616 decision records
+snapshot size 737 KB raw, 56 KB gzip; latency median 220 ms (min 211, max 280) over 10 calls
+page /corridor: ready in 1530 ms (reload, incl. sign-in restore + snapshot)
+page /decisions: ready in 919 ms (reload, incl. sign-in restore + snapshot)
+== live SACHET (now)
+24 alerts; {'imdWarning': 'NONE', 'label': 'SACHET · no active IMD alert for Dima Hasao · 03 Nov 03:08', 'alerts': []}
+
+== browser walkthrough re-run on the CURRENT backend code (Phase 6-7 included; the run above hit an older backend still bound to :8000)
+F1 Segment Risk Map
+  screenshot 30-real-corridor-map.png
+  screenshot 31-segment-drawer-model-score.png
+  screenshot 32-config-imd-rainfall-date.png
+  screenshot 33-real-corridor-15-may-2022.png
+  RED segments: 15 May 2022 = 32, 10 May 2022 = 0
+F3 Verified Ground Reports
+  screenshot 34-report-submitted-real-segment.png
+  report REP-0715 segment NH27-DH-108 route manual_review inside corridor True distance 0.0 km (PostGIS)
+  screenshot 35-officer-review-real.png
+F2 Safe Passage and Closure Engine
+  screenshot 36-decisions-real-hold.png
+  AZ-108S: HOLD · Jatinga Tourist Rest House · close recommended True · R-BLOCKED-RED-HOLD
+  AZ-108N: HOLD · Silchar side · close recommended True · R-BLOCKED-RED-HOLD
+  screenshot 37-closure-approval-real.png
+  screenshot 38-alert-approval-real.png
+  screenshot 39-cap-real.png
+  screenshot 40-incident-estimate-real.png
+  screenshot 41-decisions-expected-wait-real.png
+  screenshot 42-records-real.png
+final: NH27-DH-108 road state OPEN; alerts ['ALR-0735 REOPEN draft CAP=no', 'ALR-0724 CLOSE approved CAP=yes']; decision records 616; audit entries 81
+browser API calls 60, failed 0: []
+console/page errors 0: []
+
+== findings in this run
+- First live SACHET poll raced the walkthrough's data reset (KeyError 'config'): wipe and re-seed were two transactions. Fixed: reset now wipes and re-seeds in one transaction under the corridor advisory lock (main.py seed_if_needed(wipe=True)); backend tests 65 passed after the fix.
+- After restart the SACHET poll failed with ConnectTimeout (network); the feed failed safe (logged, last values kept, retry in 30 min). A direct fetch earlier in this run succeeded (24 alerts, none for Dima Hasao). Live application of a SACHET label was therefore not observed in this run.
