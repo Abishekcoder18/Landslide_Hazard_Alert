@@ -1,0 +1,8 @@
+id,name,lat,lon,side,capacity_vehicles,facilities,source,verified
+HP-LUMDING,Lumding side,25.74191,93.138907,Lumding side,,,corridor-end (no OSM feature),no
+HP-LANGTING,Langting,25.497231,93.113633,Maibong,,,osm:245734459,no
+HP-MAIBONG,Maibong,25.302128,93.133292,Maibong,,,osm:245731951,no
+HP-MAHUR,Mahur,25.18308,93.113386,Haflong,,,osm:245730074,no
+HP-JATINGA-TOURIST-REST-HOUSE,Jatinga Tourist Rest House,25.125681,93.025612,Jatinga,,Food,osm:10226866317,no
+HP-PARKING-NEAR-RETZOL,Parking near Retzol,25.1074,93.002927,Jatinga,,Parking,osm:1424944037,no
+HP-SILCHAR,Silchar side (district boundary),25.082021,92.816762,District boundary (Silchar side),,,corridor-end (no OSM feature),no

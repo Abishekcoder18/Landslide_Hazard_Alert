@@ -64,7 +64,7 @@ def test_every_stretch_in_exactly_one_segment_geometry(fc):
 def test_zones_and_holding_points_reference_real_segments(fc, corridor):
     ids = {f["id"] for f in fc["features"]}
     hps = {h["id"]: h for h in corridor["holdingPoints"]}
-    assert set(hps) == {"HP-LUMDING", "HP-HAFLONG", "HP-SILCHAR"}
+    assert {"HP-LUMDING", "HP-SILCHAR"} <= set(hps)  # corridor ends; OSM candidates in backend/inputs/holding_points.csv
     assert all(h["provisional"] for h in hps.values())
     assert all(h["segmentId"] in ids for h in hps.values())
     assert hps["HP-LUMDING"]["segmentId"] == "NH27-DH-001"

@@ -86,7 +86,15 @@ export interface SafeHoldingPoint {
   locationName: string;
   facilities: string[];
   segmentId: string;
-  capacityVehicles: number;
+  /** null = unknown (OSM has no capacity); never invented. */
+  capacityVehicles: number | null;
+  /** Where the point comes from, e.g. 'osm:245731951'; absent in sample data. */
+  source?: string;
+  /** Checked on the ground by the district (false until confirmed). */
+  verified?: boolean;
+  /** Real location when known (OSM); the map otherwise uses the host segment's centre. */
+  lat?: number;
+  lon?: number;
   provisional: boolean;
 }
 

@@ -165,12 +165,12 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
           </div>`
         });
 
-        const hpMarker = L.marker(hostSeg.center, { icon: hpIcon });
+        const hpMarker = L.marker(hp.lat != null && hp.lon != null ? [hp.lat, hp.lon] : hostSeg.center, { icon: hpIcon });
         hpMarker.bindPopup(
           `<div style="font-family: Inter, sans-serif; font-size: 12px;">
             <strong style="color: #1F2933;">${hp.name}</strong><br/>
             <span style="color: #6B7280;">${hp.locationName}</span><br/>
-            <span>Capacity: ${hp.capacityVehicles} vehicles</span>
+            <span>Capacity: ${hp.capacityVehicles ?? '—'}${hp.capacityVehicles != null ? ' vehicles' : ''}</span>${hp.source ? `<br/><span style="color: #6B7280;">${hp.source}</span>` : ''}
           </div>`
         );
         hpMarker.addTo(group);

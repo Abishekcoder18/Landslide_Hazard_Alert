@@ -168,7 +168,33 @@ def landslide_counts(segs: list[dict]) -> dict[str, int]:
     return {s["id"]: int((g.distance(s["_geom"]) <= LANDSLIDE_BUFFER_M).sum()) for s in segs}
 
 
+HP_CSV = REPO / "backend" / "inputs" / "holding_points.csv"
+SHORT = {"HP-LUMDING": "Lumding side", "HP-SILCHAR": "Silchar side"}
+
+
+def holding_points_from_csv(segs: list[dict]) -> list[dict]:
+    """Candidates from backend/inputs/holding_points.csv (holding_points_osm.py), snapped to the nearest segment.
+    Capacity stays None unless the CSV has it; every point stays Provisional until verified."""
+    import csv
+    from shapely.geometry import Point as P
+    seg_geoms = [(s["id"], s["_geom"]) for s in segs]
+    out = []
+    with HP_CSV.open(encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            p = gpd.GeoSeries([P(float(row["lon"]), float(row["lat"]))], crs=4326).to_crs(UTM).iloc[0]
+            sid = min(seg_geoms, key=lambda t: t[1].distance(p))[0]
+            cap = row.get("capacity_vehicles", "").strip()
+            out.append({"id": row["id"], "name": row["name"], "shortName": SHORT.get(row["id"], row["name"]),
+                        "locationName": row["side"], "facilities": [x.strip() for x in row["facilities"].split(";") if x.strip()],
+                        "segmentId": sid, "capacityVehicles": int(cap) if cap else None, "provisional": True,
+                        "source": row["source"], "verified": row["verified"].strip().lower() == "yes",
+                        "lat": float(row["lat"]), "lon": float(row["lon"])})
+    return out
+
+
 def holding_points(segs: list[dict], line: LineString, pl: gpd.GeoDataFrame) -> list[dict]:
+    if HP_CSV.exists():
+        return holding_points_from_csv(segs)
     haf = pl[pl["name"].map(ascii_name).str.lower() == "haflong"]
     if haf.empty:
         raise SystemExit("OSM place 'Haflong' not found - stop and report")

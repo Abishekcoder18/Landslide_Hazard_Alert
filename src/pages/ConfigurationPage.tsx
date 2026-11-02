@@ -250,7 +250,7 @@ export const ConfigurationPage: React.FC = () => {
                     <tr key={h.id}>
                       <Td>
                         <div className="font-medium">{h.name}</div>
-                        <div className="text-xs text-[#6B7280]">{h.locationName}</div>
+                        <div className="text-xs text-[#6B7280]">{h.locationName}{h.source ? ` · ${h.source}` : ''}</div>
                       </Td>
                       <Td>
                         <span className="inline-flex items-center gap-1.5">
@@ -258,7 +258,7 @@ export const ConfigurationPage: React.FC = () => {
                           <RiskBadge level={segments[h.segmentId].riskLevel} />
                         </span>
                       </Td>
-                      <Td className="font-mono">{h.capacityVehicles}</Td>
+                      <Td className="font-mono">{h.capacityVehicles ?? '—'}</Td>
                       <Td className="text-xs">{h.facilities.join(' · ')}</Td>
                       <Td>
                         <div className="flex gap-1 flex-wrap">
