@@ -77,7 +77,12 @@ class TextBody(BaseModel):
 def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, ai: Optional[ClaudeAI] = None,
                clock: Callable[[], datetime] = now_utc) -> FastAPI:
     store = store or Store(cfg.database_url, cfg.db_schema)
-    ai = ai or ClaudeAI(cfg.anthropic_api_key, cfg.ai_model)
+    if ai is None:
+        if not cfg.anthropic_api_key and cfg.ai_provider.lower() == "ollama":
+            from .ai_local import OllamaAI
+            ai = OllamaAI(cfg.ollama_model, cfg.ollama_url, cfg.ollama_timeout_s)  # labelled "local:<model>"
+        else:
+            ai = ClaudeAI(cfg.anthropic_api_key, cfg.ai_model)  # disabled without a key
     cfg.upload_dir.mkdir(parents=True, exist_ok=True)
 
     def feed_for(conn) -> Callable[[str], dict]:

@@ -9,7 +9,7 @@ import { api } from '../api';
 import { canDecideApproval } from '../domain/permissions';
 import { ALERT_LANGUAGES } from '../domain/alerts';
 import { Alert, AlertLanguage, Approval, ClosureType } from '../types';
-import { fmtCountdown, fmtDateTime, fmtTime } from '../lib/format';
+import { fmtCountdown, fmtDateTime, fmtTime, providerLabel } from '../lib/format';
 
 const KIND: Record<Approval['kind'], { label: string; icon: React.ReactNode }> = {
   closure: { label: 'Closure', icon: <OctagonX className="w-4 h-4" /> },
@@ -194,7 +194,7 @@ const AlertDetail: React.FC<{ a: Approval; alert: Alert }> = ({ a, alert }) => {
           />
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <Pill tone="grey">{text.source === 'llm' ? 'Language model' : text.source === 'officer_edit' ? 'Officer edit' : 'Template'}</Pill>
+              <Pill tone="grey">{text.source === 'llm' ? providerLabel(alert.writerModel) : text.source === 'officer_edit' ? 'Officer edit' : 'Template'}</Pill>
               {text.blocked ? (
                 <Pill tone="red">Blocked · template used</Pill>
               ) : text.validation.ok ? (

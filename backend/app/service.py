@@ -323,6 +323,7 @@ class Workflow:
         if not alert or alert["status"] != "draft":
             return
         alert["texts"] = build_alert_texts(alert["fields"], self.known_places(), generated)
+        alert["writerModel"] = model  # "local:<model>" for the Ollama provider, the Claude model id otherwise
         blocked = [t["lang"] for t in alert["texts"] if t["lang"] != "dis" and t["blocked"]]
         self.audit("Alert writer", "system", "Alert texts generated",
                    f"{alert_id} · {model}" + (f" · blocked: {', '.join(blocked)}" if blocked else " · all validated"), entity=alert_id)

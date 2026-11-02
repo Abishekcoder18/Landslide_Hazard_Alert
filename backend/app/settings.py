@@ -26,6 +26,11 @@ class Settings:
     sachet_minutes: float = float(os.getenv("SACHET_POLL_MINUTES", "30"))
     anthropic_api_key: str | None = os.getenv("ANTHROPIC_API_KEY") or None
     ai_model: str = os.getenv("AI_MODEL", "claude-sonnet-5-5")
+    # Claude is used whenever ANTHROPIC_API_KEY is set. Without a key, AI_PROVIDER=ollama selects a free local model.
+    ai_provider: str = os.getenv("AI_PROVIDER", "")
+    ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5vl:7b")
+    ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    ollama_timeout_s: float = float(os.getenv("OLLAMA_TIMEOUT_S", "180"))
     secret_key: str = os.getenv("SECRET_KEY") or secrets.token_hex(32)
     cors_origins: list[str] = field(default_factory=lambda: [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()])
     timezone: str = os.getenv("CONTROL_ROOM_TZ", "Asia/Kolkata")

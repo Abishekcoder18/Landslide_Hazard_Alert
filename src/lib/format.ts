@@ -39,3 +39,6 @@ export function toLocalInput(iso?: string): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 export const fromLocalInput = (v: string) => (v ? new Date(v).toISOString() : null);
+
+/** AI provider shown to users: the free local model ("local:<model>") is never presented as Claude. */
+export const providerLabel = (model?: string) => (model?.startsWith('local:') ? 'Local model' : model?.startsWith('claude') ? 'Claude' : 'Language model');

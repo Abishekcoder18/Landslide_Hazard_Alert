@@ -6,3 +6,5 @@ tests/fixtures/parity.json
 .pytest_cache/
 .venv-data/
 data/
+inputs/photo_eval/*.jpg
+inputs/photo_eval/*.png

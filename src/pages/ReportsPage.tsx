@@ -9,7 +9,7 @@ import { api, PhotoInput } from '../api';
 import { sortQueue } from '../domain/reportChecks';
 import { SAMPLE_PHOTOS } from '../api/mock/seed';
 import { HazardClass, Report, RoadState } from '../types';
-import { fmtAgo, fmtTime } from '../lib/format';
+import { fmtAgo, fmtTime, providerLabel } from '../lib/format';
 
 const HAZARD_LABEL: Record<HazardClass, string> = {
   debris: 'Debris on road',
@@ -40,7 +40,11 @@ const AiCell: React.FC<{ r: Report }> = ({ r }) =>
       <div className="text-xs text-[#6B7280] font-mono">
         {r.ai.blockedShare}% blocked · {(r.ai.confidence * 100).toFixed(0)}%
       </div>
-      {r.ai.simulated && <Pill tone="grey" className="!text-[11px]">Simulated</Pill>}
+      {r.ai.simulated ? (
+        <Pill tone="grey" className="!text-[11px]">Simulated</Pill>
+      ) : (
+        <Pill tone="grey" className="!text-[11px]">{providerLabel(r.ai.model)}</Pill>
+      )}
     </div>
   ) : (
     <Pill tone="yellow">{r.aiError ?? 'No AI result'}</Pill>

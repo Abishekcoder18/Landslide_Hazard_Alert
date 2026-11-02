@@ -285,6 +285,8 @@ export interface Alert {
   approvedBy?: string;
   approvedAt?: string;
   capXml?: string;
+  /** Model that wrote the texts: "local:<model>" (Ollama) or the Claude model id. */
+  writerModel?: string;
 }
 
 export interface AuditEntry {
