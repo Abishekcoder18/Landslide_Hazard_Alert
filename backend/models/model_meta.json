@@ -1,0 +1,408 @@
+{
+ "version": "susc-lgbm-20261102",
+ "trained_at": "2026-11-02T23:29:16",
+ "model": "lightgbm",
+ "purpose": "Relative landslide susceptibility of NH-27 segments in Dima Hasao; replaces the categorical susceptibility input of the rule-based Risk Index.",
+ "not_for": [
+  "setting GO/HOLD/DIVERT/CLOSE directly",
+  "predicting when a landslide will happen",
+  "use outside Dima Hasao without retraining"
+ ],
+ "features": [
+  "elevation",
+  "slope",
+  "slope_max_150m",
+  "aspect_sin",
+  "aspect_cos",
+  "plan_curv",
+  "profile_curv",
+  "relief_450m",
+  "roughness_90m",
+  "dist_drainage_m",
+  "lc_tree",
+  "lc_shrub",
+  "lc_grass",
+  "lc_crop",
+  "lc_built",
+  "lc_bare",
+  "lc_water"
+ ],
+ "score": "percentile of model output among road-side cells (<= 100 m from any road) in the district; segment = mean within 100 m of the segment",
+ "category_cutoffs": {
+  "Very Low": 0.2,
+  "Low": 0.4,
+  "Moderate": 0.6,
+  "High": 0.8,
+  "Very High": 1.01
+ },
+ "sampling": {
+  "positives_points_in_district": 379,
+  "positive_cells": 317,
+  "negative_cells": 3010,
+  "road_band_m": 976.2,
+  "candidate_negative_cells": 2076168,
+  "blocks": 57,
+  "neg_ratio": 10,
+  "exclude_m": 500.0,
+  "seed": 42
+ },
+ "validation": {
+  "method": "spatial block CV, 10 km blocks, StratifiedGroupKFold 5 folds; threshold chosen inside each training fold for recall >= 0.8",
+  "results": {
+   "slope_only": {
+    "folds": [
+     {
+      "fold": 0,
+      "n_test": 737,
+      "pos_test": 121,
+      "roc_auc": 0.7366,
+      "pr_auc": 0.3028,
+      "threshold": 0.142,
+      "precision": 0.2688,
+      "recall": 0.7686
+     },
+     {
+      "fold": 1,
+      "n_test": 654,
+      "pos_test": 50,
+      "roc_auc": 0.7583,
+      "pr_auc": 0.1799,
+      "threshold": 0.1376,
+      "precision": 0.1399,
+      "recall": 0.82
+     },
+     {
+      "fold": 2,
+      "n_test": 637,
+      "pos_test": 46,
+      "roc_auc": 0.7227,
+      "pr_auc": 0.1517,
+      "threshold": 0.1411,
+      "precision": 0.1316,
+      "recall": 0.7609
+     },
+     {
+      "fold": 3,
+      "n_test": 666,
+      "pos_test": 54,
+      "roc_auc": 0.7554,
+      "pr_auc": 0.1592,
+      "threshold": 0.1357,
+      "precision": 0.1572,
+      "recall": 0.8704
+     },
+     {
+      "fold": 4,
+      "n_test": 633,
+      "pos_test": 46,
+      "roc_auc": 0.7681,
+      "pr_auc": 0.1719,
+      "threshold": 0.1381,
+      "precision": 0.1545,
+      "recall": 0.7826
+     }
+    ],
+    "roc_auc_mean": 0.7482,
+    "pr_auc_mean": 0.1931,
+    "precision_mean": 0.1704,
+    "recall_mean": 0.8005,
+    "roc_auc_std": 0.0182,
+    "pr_auc_std": 0.0623,
+    "precision_std": 0.056,
+    "recall_std": 0.0452,
+    "pr_auc_no_skill": 0.0953
+   },
+   "logistic": {
+    "folds": [
+     {
+      "fold": 0,
+      "n_test": 737,
+      "pos_test": 121,
+      "roc_auc": 0.7738,
+      "pr_auc": 0.4309,
+      "threshold": 0.4435,
+      "precision": 0.2968,
+      "recall": 0.7603
+     },
+     {
+      "fold": 1,
+      "n_test": 654,
+      "pos_test": 50,
+      "roc_auc": 0.8341,
+      "pr_auc": 0.3228,
+      "threshold": 0.4084,
+      "precision": 0.1424,
+      "recall": 0.84
+     },
+     {
+      "fold": 2,
+      "n_test": 637,
+      "pos_test": 46,
+      "roc_auc": 0.7477,
+      "pr_auc": 0.2004,
+      "threshold": 0.3949,
+      "precision": 0.1406,
+      "recall": 0.7826
+     },
+     {
+      "fold": 3,
+      "n_test": 666,
+      "pos_test": 54,
+      "roc_auc": 0.7872,
+      "pr_auc": 0.2138,
+      "threshold": 0.3986,
+      "precision": 0.1466,
+      "recall": 0.8333
+     },
+     {
+      "fold": 4,
+      "n_test": 633,
+      "pos_test": 46,
+      "roc_auc": 0.7702,
+      "pr_auc": 0.1657,
+      "threshold": 0.4042,
+      "precision": 0.1466,
+      "recall": 0.8478
+     }
+    ],
+    "roc_auc_mean": 0.7826,
+    "pr_auc_mean": 0.2667,
+    "precision_mean": 0.1746,
+    "recall_mean": 0.8128,
+    "roc_auc_std": 0.0321,
+    "pr_auc_std": 0.109,
+    "precision_std": 0.0684,
+    "recall_std": 0.0389,
+    "pr_auc_no_skill": 0.0953
+   },
+   "lightgbm": {
+    "folds": [
+     {
+      "fold": 0,
+      "n_test": 737,
+      "pos_test": 121,
+      "roc_auc": 0.7712,
+      "pr_auc": 0.3976,
+      "threshold": 0.0415,
+      "precision": 0.2601,
+      "recall": 0.8512
+     },
+     {
+      "fold": 1,
+      "n_test": 654,
+      "pos_test": 50,
+      "roc_auc": 0.861,
+      "pr_auc": 0.3751,
+      "threshold": 0.0408,
+      "precision": 0.1247,
+      "recall": 0.94
+     },
+     {
+      "fold": 2,
+      "n_test": 637,
+      "pos_test": 46,
+      "roc_auc": 0.785,
+      "pr_auc": 0.2764,
+      "threshold": 0.0267,
+      "precision": 0.1105,
+      "recall": 0.913
+     },
+     {
+      "fold": 3,
+      "n_test": 666,
+      "pos_test": 54,
+      "roc_auc": 0.7436,
+      "pr_auc": 0.2791,
+      "threshold": 0.0586,
+      "precision": 0.1384,
+      "recall": 0.8148
+     },
+     {
+      "fold": 4,
+      "n_test": 633,
+      "pos_test": 46,
+      "roc_auc": 0.7948,
+      "pr_auc": 0.1981,
+      "threshold": 0.04,
+      "precision": 0.128,
+      "recall": 0.9348
+     }
+    ],
+    "roc_auc_mean": 0.7911,
+    "pr_auc_mean": 0.3053,
+    "precision_mean": 0.1523,
+    "recall_mean": 0.8908,
+    "roc_auc_std": 0.0436,
+    "pr_auc_std": 0.0812,
+    "precision_std": 0.0611,
+    "recall_std": 0.0552,
+    "pr_auc_no_skill": 0.0953
+   }
+  },
+  "calibration_oof": {
+   "logistic": {
+    "brier": 0.189,
+    "ece_quantile_bins": 0.2918,
+    "bins": [
+     {
+      "mean_predicted": 0.035,
+      "observed_rate": 0.009
+     },
+     {
+      "mean_predicted": 0.112,
+      "observed_rate": 0.021
+     },
+     {
+      "mean_predicted": 0.179,
+      "observed_rate": 0.03
+     },
+     {
+      "mean_predicted": 0.246,
+      "observed_rate": 0.036
+     },
+     {
+      "mean_predicted": 0.319,
+      "observed_rate": 0.039
+     },
+     {
+      "mean_predicted": 0.396,
+      "observed_rate": 0.063
+     },
+     {
+      "mean_predicted": 0.48,
+      "observed_rate": 0.093
+     },
+     {
+      "mean_predicted": 0.58,
+      "observed_rate": 0.133
+     },
+     {
+      "mean_predicted": 0.689,
+      "observed_rate": 0.225
+     },
+     {
+      "mean_predicted": 0.835,
+      "observed_rate": 0.303
+     }
+    ]
+   },
+   "lightgbm": {
+    "brier": 0.0972,
+    "ece_quantile_bins": 0.0823,
+    "bins": [
+     {
+      "mean_predicted": 0.002,
+      "observed_rate": 0.006
+     },
+     {
+      "mean_predicted": 0.007,
+      "observed_rate": 0.021
+     },
+     {
+      "mean_predicted": 0.013,
+      "observed_rate": 0.036
+     },
+     {
+      "mean_predicted": 0.023,
+      "observed_rate": 0.03
+     },
+     {
+      "mean_predicted": 0.04,
+      "observed_rate": 0.06
+     },
+     {
+      "mean_predicted": 0.07,
+      "observed_rate": 0.075
+     },
+     {
+      "mean_predicted": 0.119,
+      "observed_rate": 0.084
+     },
+     {
+      "mean_predicted": 0.214,
+      "observed_rate": 0.096
+     },
+     {
+      "mean_predicted": 0.398,
+      "observed_rate": 0.192
+     },
+     {
+      "mean_predicted": 0.742,
+      "observed_rate": 0.351
+     }
+    ]
+   }
+  }
+ },
+ "back_test": [
+  {
+   "year": 2022,
+   "events": 46,
+   "trained_without_year": true,
+   "median_percentile_vs_background": 0.917,
+   "share_in_top_10pct": 0.565,
+   "share_in_top_20pct": 0.761,
+   "share_in_top_40pct": 0.935,
+   "roc_auc_vs_background": 0.8607
+  },
+  {
+   "year": 2024,
+   "events": 15,
+   "trained_without_year": true,
+   "median_percentile_vs_background": 0.928,
+   "share_in_top_10pct": 0.667,
+   "share_in_top_20pct": 0.933,
+   "share_in_top_40pct": 1.0,
+   "roc_auc_vs_background": 0.9076
+  }
+ ],
+ "feature_importance": {
+  "roughness_90m": 0.161,
+  "elevation": 0.1524,
+  "dist_drainage_m": 0.1372,
+  "slope_max_150m": 0.1158,
+  "relief_450m": 0.1047,
+  "profile_curv": 0.0746,
+  "plan_curv": 0.0638,
+  "aspect_sin": 0.0634,
+  "slope": 0.0611,
+  "aspect_cos": 0.0484,
+  "lc_crop": 0.0097,
+  "lc_tree": 0.0053,
+  "lc_grass": 0.0015,
+  "lc_built": 0.0012,
+  "lc_shrub": 0.0,
+  "lc_bare": 0.0,
+  "lc_water": 0.0
+ },
+ "segment_scores": {
+  "min": 0.032,
+  "median": 0.589,
+  "max": 0.958,
+  "classes": {
+   "High": 37,
+   "Low": 31,
+   "Very High": 27,
+   "Moderate": 25,
+   "Very Low": 17
+  }
+ },
+ "data": {
+  "labels": "D:\\assam_landslide_road_events.csv",
+  "roads": "D:\\assam_road_dataset_final.csv",
+  "dem": [
+   "Copernicus_DSM_COG_10_N24_00_E092_00_DEM.tif",
+   "Copernicus_DSM_COG_10_N24_00_E093_00_DEM.tif",
+   "Copernicus_DSM_COG_10_N25_00_E092_00_DEM.tif",
+   "Copernicus_DSM_COG_10_N25_00_E093_00_DEM.tif"
+  ],
+  "landcover": "worldcover_2021_dh.tif",
+  "drainage": "D:\\RESILION\\data\\raw\\roads\\north-eastern-zone.gpkg",
+  "boundary": "D:\\RESILION\\data\\processed\\roads\\resilion_districts.gpkg"
+ },
+ "artifact": {
+  "file": "susceptibility.joblib",
+  "bytes": 298101,
+  "sha256": "36bcb88818f4fa96077693480fdab6081ed558d627df1de725d2c9225d95fcc5"
+ }
+}
