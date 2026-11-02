@@ -23,7 +23,7 @@ from .domain.alerts import render_template
 from .seed import SAMPLE_PHOTOS
 from .service import ApiError, Workflow, new_state
 from .settings import Settings, settings as default_settings
-from .store import LOCK_KEY, Store, now_utc
+from .store import Store, now_utc
 
 log = logging.getLogger("resilion")
 
@@ -74,14 +74,14 @@ class TextBody(BaseModel):
 
 def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, ai: Optional[ClaudeAI] = None,
                clock: Callable[[], datetime] = now_utc) -> FastAPI:
-    store = store or Store(cfg.database_url)
+    store = store or Store(cfg.database_url, cfg.db_schema)
     ai = ai or ClaudeAI(cfg.anthropic_api_key, cfg.ai_model)
     cfg.upload_dir.mkdir(parents=True, exist_ok=True)
 
     def seed_if_needed() -> None:
         store.init_schema()
         with store.connect() as conn:
-            conn.execute("SELECT pg_advisory_xact_lock(%s)", (LOCK_KEY,))
+            conn.execute("SELECT pg_advisory_xact_lock(%s)", (store.lock_key,))
             if not store.is_seeded(conn):
                 fresh = new_state(clock())
                 Workflow(fresh, clock, cfg.timezone).seed_initial()

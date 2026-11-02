@@ -1,5 +1,5 @@
 """API tests against a real PostgreSQL + PostGIS database (skipped if unreachable).
-Set TEST_DATABASE_URL to point at a disposable database — it is wiped."""
+Set TEST_DATABASE_URL; tests use (and wipe) only the schema TEST_DB_SCHEMA (default resilion2_test)."""
 import base64
 import os
 from datetime import datetime, timedelta, timezone
@@ -11,9 +11,10 @@ from fastapi.testclient import TestClient
 from app.ai import AIUnavailable
 from app.main import create_app
 from app.settings import Settings
-from app.store import Store
+from app.settings import settings as _settings  # noqa: F401  (loads backend/.env)
+from app.store import Store, normalize_dsn
 
-DSN = os.getenv("TEST_DATABASE_URL", "postgresql://resilion:resilion@localhost:5432/resilion")
+DSN = normalize_dsn(os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL") or "postgresql://resilion:resilion@localhost:5432/resilion")
 PNG = "data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"0" * 64).decode()
 
 
@@ -47,7 +48,7 @@ def env(tmp_path):
             c.execute("SELECT postgis_version()")
     except Exception as e:  # noqa: BLE001
         pytest.skip(f"PostGIS not reachable: {e}")
-    store = Store(DSN)
+    store = Store(DSN, os.getenv("TEST_DB_SCHEMA", "resilion2_test"))
     store.init_schema()
     with store.connect() as conn:
         store.wipe(conn)

@@ -260,9 +260,14 @@ def load_postgis(result: dict) -> str:
         load_dotenv(REPO / "backend" / ".env")
     except ImportError:
         pass
+    import re
     dsn = os.environ.get("DATABASE_URL")
     if not dsn:
         return "skipped: DATABASE_URL not set (backend/.env missing)"
+    dsn = re.sub(r"^postgres(ql)?\+\w+://", "postgresql://", dsn)
+    s = os.environ.get("DB_SCHEMA", "resilion2")
+    if not re.fullmatch(r"resilion2[a-z0-9_]*", s):
+        raise SystemExit(f"DB_SCHEMA must start with resilion2 (got {s}); public is never written")
     import psycopg
     from psycopg.types.json import Jsonb
     try:
@@ -270,25 +275,26 @@ def load_postgis(result: dict) -> str:
     except Exception as e:  # noqa: BLE001
         return f"skipped: cannot connect ({type(e).__name__}: {str(e).strip().splitlines()[0]})"
     with conn:
-        conn.execute("""
-            CREATE EXTENSION IF NOT EXISTS postgis;
-            CREATE TABLE IF NOT EXISTS ref_segments (id text PRIMARY KEY, pos int NOT NULL, start_km float8, end_km float8,
-              name text, geom geometry(LineString, 4326) NOT NULL, data jsonb NOT NULL);
-            CREATE INDEX IF NOT EXISTS ref_segments_geom_idx ON ref_segments USING gist (geom);
-            CREATE TABLE IF NOT EXISTS ref_zones (id text PRIMARY KEY, pos int NOT NULL, data jsonb NOT NULL);
-            CREATE TABLE IF NOT EXISTS ref_holding_points (id text PRIMARY KEY, pos int NOT NULL, data jsonb NOT NULL);
-            TRUNCATE ref_segments, ref_zones, ref_holding_points;""")
+        # Only the RESILION 2.0 schema is written; every name is schema-qualified.
+        conn.execute(f"""
+            CREATE SCHEMA IF NOT EXISTS {s};
+            CREATE TABLE IF NOT EXISTS {s}.ref_segments (id text PRIMARY KEY, pos int NOT NULL, start_km float8, end_km float8,
+              name text, geom public.geometry(LineString, 4326) NOT NULL, data jsonb NOT NULL);
+            CREATE INDEX IF NOT EXISTS ref_segments_geom_idx ON {s}.ref_segments USING gist (geom);
+            CREATE TABLE IF NOT EXISTS {s}.ref_zones (id text PRIMARY KEY, pos int NOT NULL, data jsonb NOT NULL);
+            CREATE TABLE IF NOT EXISTS {s}.ref_holding_points (id text PRIMARY KEY, pos int NOT NULL, data jsonb NOT NULL);
+            TRUNCATE {s}.ref_segments, {s}.ref_zones, {s}.ref_holding_points;""")
         with conn.cursor() as cur:
             cur.executemany(
-                "INSERT INTO ref_segments VALUES (%s, %s, %s, %s, %s, ST_GeomFromText(%s, 4326), %s)",
-                [(s["id"], i, s["startKm"], s["endKm"], s["name"],
-                  "LINESTRING(" + ", ".join(f"{lon} {lat}" for lat, lon in s["coordinates"]) + ")",
-                  Jsonb({k: v for k, v in s.items() if k != "_geom"})) for i, s in enumerate(result["segments"])])
-            cur.executemany("INSERT INTO ref_zones VALUES (%s, %s, %s)", [(z["id"], i, Jsonb(z)) for i, z in enumerate(result["zones"])])
-            cur.executemany("INSERT INTO ref_holding_points VALUES (%s, %s, %s)",
+                f"INSERT INTO {s}.ref_segments VALUES (%s, %s, %s, %s, %s, public.ST_GeomFromText(%s, 4326), %s)",
+                [(x["id"], i, x["startKm"], x["endKm"], x["name"],
+                  "LINESTRING(" + ", ".join(f"{lon} {lat}" for lat, lon in x["coordinates"]) + ")",
+                  Jsonb({k: v for k, v in x.items() if k != "_geom"})) for i, x in enumerate(result["segments"])])
+            cur.executemany(f"INSERT INTO {s}.ref_zones VALUES (%s, %s, %s)", [(z["id"], i, Jsonb(z)) for i, z in enumerate(result["zones"])])
+            cur.executemany(f"INSERT INTO {s}.ref_holding_points VALUES (%s, %s, %s)",
                             [(h["id"], i, Jsonb({k: v for k, v in h.items() if not k.startswith("_")})) for i, h in enumerate(result["holdingPoints"])])
-        n, km = conn.execute("SELECT count(*), sum(ST_Length(geom::geography))/1000 FROM ref_segments").fetchone()
-    return f"loaded {n} segments ({km:.3f} km geodesic) into ref_segments; {len(result['zones'])} zones; {len(result['holdingPoints'])} holding points"
+        n, km = conn.execute(f"SELECT count(*), sum(public.ST_Length(geom::public.geography))/1000 FROM {s}.ref_segments").fetchone()
+    return f"loaded {n} segments ({km:.3f} km geodesic) into {s}.ref_segments; {len(result['zones'])} zones; {len(result['holdingPoints'])} holding points"
 
 
 def main() -> int:

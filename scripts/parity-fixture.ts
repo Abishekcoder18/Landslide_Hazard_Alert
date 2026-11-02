@@ -94,5 +94,6 @@ const alerts = fieldsList.map(f => {
   };
 });
 
+fs.mkdirSync('backend/tests/fixtures', { recursive: true });
 fs.writeFileSync('backend/tests/fixtures/parity.json', JSON.stringify({ now: NOW.toISOString(), places: PLACES, config: DEFAULT_CONFIG, engine, risk, alerts }));
 console.log(`engine ${engine.length} · risk ${risk.length} · alerts ${alerts.length}`);
