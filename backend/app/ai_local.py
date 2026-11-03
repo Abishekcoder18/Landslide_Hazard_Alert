@@ -1,9 +1,14 @@
-"""Optional free local model (Ollama) for the two approved AI uses, used only when no ANTHROPIC_API_KEY is set and
-AI_PROVIDER=ollama (owner decision 2026-11; changes PRD section 9 for that case).
+"""Optional free local model (Ollama) for the PHOTO CHECK ONLY, used when no ANTHROPIC_API_KEY is set and
+AI_PROVIDER=ollama (owner decisions 2026-11 and 2026-11-03; changes PRD section 9 for that case).
 
-Same prompts, label set, JSON schemas and fail-safe behaviour as app/ai.py (Claude): any error, timeout or invalid
-output -> AIUnavailable -> manual review / plain template (FR-26, BR-09). The model name is stored as "local:<model>"
-and the UI shows "Local model", never "Claude". Ollama API: POST {OLLAMA_URL}/api/chat with `format` = JSON schema.
+The alert writer is NOT run on a local model: in the owner's tests qwen2.5vl:7b wrote mostly Bengali for Assamese,
+dropped "HOLD" and changed place names and times; gemma3:4b only echoed the tokens and put a Russian word in Hindi
+(docs/AI_PROMPT_LOG.md). Without a Claude key, alerts use the validated templates. OLLAMA_TEXT_MODEL is accepted
+only as "disabled".
+
+Same photo prompt, label set, JSON schema and fail-safe behaviour as app/ai.py (Claude): any error, timeout or invalid
+output -> AIUnavailable -> manual review (FR-26). The model name is stored as "local:<model>" and the UI shows
+"Local model", never "Claude". Ollama API: POST {OLLAMA_URL}/api/chat with `format` = JSON schema.
 """
 from __future__ import annotations
 
@@ -13,7 +18,7 @@ import logging
 
 import httpx
 
-from .ai import ALERT_SCHEMA, ALERT_SYSTEM, HAZARD_CLASSES, PHOTO_SCHEMA, PHOTO_SYSTEM, AIUnavailable, Image
+from .ai import HAZARD_CLASSES, PHOTO_SCHEMA, PHOTO_SYSTEM, AIUnavailable, Image
 
 log = logging.getLogger("resilion.ai.local")
 
@@ -25,6 +30,8 @@ class OllamaAI:
         self.url = url.rstrip("/")
         self.timeout = timeout_s
         self.enabled = True
+        self.photo_enabled = True
+        self.writes_alerts = False  # alert text: Claude or templates only
 
     def _chat(self, *, system: str, user: str, schema: dict, images: list[str] | None = None) -> dict:
         msg = {"role": "user", "content": user}
@@ -76,7 +83,5 @@ class OllamaAI:
         return {"hazardClass": cls, "blockedShare": share, "confidence": round(conf, 2), "model": self.model, "simulated": False}
 
     def write_alerts(self, fields: dict, templates: dict[str, str]) -> tuple[dict, str]:
-        """FR-28, same contract as ClaudeAI.write_alerts. The caller validates every text and blocks mismatches (BR-09)."""
-        payload = json.dumps({"fields": fields, "reference_templates": templates}, ensure_ascii=False, indent=2)
-        out = self._chat(system=ALERT_SYSTEM, user=f"<alert_input>\n{payload}\n</alert_input>\nWrite the four alerts.", schema=ALERT_SCHEMA)
-        return {k: str(out[k]) for k in ("en", "hi", "as", "bn") if isinstance(out.get(k), str)}, self.model
+        """Never used for alert text (owner decision 2026-11-03): the caller keeps the validated templates."""
+        raise AIUnavailable("Local model is not used for alert text; templates kept")

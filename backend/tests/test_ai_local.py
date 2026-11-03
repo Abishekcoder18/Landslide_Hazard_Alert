@@ -1,4 +1,4 @@
-"""Phase 7b: optional local model (Ollama) — same contract and fail-safe behaviour as the Claude path, labelled
+"""Phase 7b: optional local model (Ollama), PHOTO CHECK ONLY — same photo contract and fail-safe behaviour as the Claude path, labelled
 "local:<model>". Ollama's HTTP API is stubbed here; real runs are recorded in docs/PHOTO_EVAL.md."""
 import json
 
@@ -65,10 +65,33 @@ def test_fail_safe(monkeypatch, kw, msg):
         photo(OllamaAI())
 
 
-def test_alert_writer_contract(monkeypatch):
-    stub(monkeypatch, content={"en": "a", "hi": "b", "as": "c", "bn": "d"})
-    texts, model = OllamaAI("qwen2.5vl:7b").write_alerts({"template": "HOLD"}, {"en": "x", "hi": "x", "as": "x", "bn": "x"})
-    assert texts == {"en": "a", "hi": "b", "as": "c", "bn": "d"} and model == "local:qwen2.5vl:7b"
+def test_local_model_never_writes_alerts(monkeypatch):
+    """Owner decision 2026-11-03: alert text is Claude-only; the local model refuses and templates are kept."""
+    seen = []
+    stub(monkeypatch, content={"en": "a", "hi": "b", "as": "c", "bn": "d"}, seen=seen)
+    m = OllamaAI("qwen2.5vl:7b")
+    assert m.photo_enabled and not m.writes_alerts
+    with pytest.raises(AIUnavailable, match="not used for alert text"):
+        m.write_alerts({"template": "HOLD"}, {"en": "x", "hi": "x", "as": "x", "bn": "x"})
+    assert seen == []  # no request reached Ollama
+
+
+def test_claude_flags():
+    assert not ClaudeAI(None).writes_alerts and not ClaudeAI(None).photo_enabled
+    assert ClaudeAI("k").writes_alerts and ClaudeAI("k").photo_enabled
+
+
+def test_vision_model_env(monkeypatch):
+    monkeypatch.setenv("OLLAMA_VISION_MODEL", "llava:7b")
+    monkeypatch.setenv("OLLAMA_TEXT_MODEL", "gemma3:4b")
+    import importlib
+
+    import app.settings as st
+    cfg = importlib.reload(st).Settings()
+    assert cfg.ollama_model == "llava:7b" and cfg.ollama_text_model == "gemma3:4b"
+    monkeypatch.delenv("OLLAMA_VISION_MODEL")
+    monkeypatch.delenv("OLLAMA_TEXT_MODEL")
+    importlib.reload(st)
 
 
 def test_provider_selection(tmp_path):

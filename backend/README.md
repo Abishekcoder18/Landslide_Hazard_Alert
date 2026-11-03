@@ -126,12 +126,21 @@ Only alerts in effect, from IMD or the Assam SDMA, of a rainfall/thunderstorm/la
 the colour is SACHET's own `severity_color`. Parser and rules: `app/sachet.py`, tests `tests/test_sachet.py` on real
 samples in `inputs/sachet_sample.xml|json`. GSI bulletins stay manual (no API).
 
-## Optional free local model (Ollama)
+## Optional free local model (Ollama) - photo check only
 
-Only when `ANTHROPIC_API_KEY` is empty: set `AI_PROVIDER=ollama` (and optionally `OLLAMA_MODEL`, default
-`qwen2.5vl:7b`, `OLLAMA_URL`, `OLLAMA_TIMEOUT_S`). Install Ollama from https://ollama.com, then `ollama pull qwen2.5vl:7b`
-(about 6 GB). Same prompts, labels and fail-safe behaviour as Claude (`app/ai_local.py`); results are stored as
-`local:<model>` and shown as "Local model". Prompt log: `docs/AI_PROMPT_LOG.md`.
+Only when `ANTHROPIC_API_KEY` is empty: set `AI_PROVIDER=ollama` (optionally `OLLAMA_VISION_MODEL`, default
+`qwen2.5vl:7b`; `OLLAMA_URL`; `OLLAMA_TIMEOUT_S`). Install Ollama from https://ollama.com, then `ollama pull qwen2.5vl:7b`
+(about 6 GB). The local model does the **photo check only**, with the same prompt, labels and fail-safe as Claude
+(`app/ai_local.py`); results are stored as `local:<model>` and shown as "Local model". The **alert writer is Claude-only**:
+without a key, alerts use the validated templates (owner decision 2026-11-03, after local models failed the hi/as/bn
+tests). `OLLAMA_TEXT_MODEL` is accepted only as `disabled`. Prompt log: `docs/AI_PROMPT_LOG.md`.
+
+### Photo evaluation set
+
+`scripts/fetch_eval_photos.py` downloads ~150 freely licensed Wikimedia Commons photos into `inputs/photo_eval/`
+(`img001.jpg` ..., credits in `CREDITS.md`). Labels are made by a person, never by a model: open
+`inputs/photo_eval/label.html` directly in a browser, load `labels.csv`, label, export, and save the export over
+`inputs/photo_eval/labels.csv`. Then `scripts/eval_photo_check.py` writes `docs/PHOTO_EVAL.md`.
 
 ## Holding points and other inputs
 

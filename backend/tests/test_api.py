@@ -24,6 +24,8 @@ class FakeAI:
 
     def __init__(self):
         self.enabled = True
+        self.photo_enabled = True
+        self.writes_alerts = True
         self.fail = False
         self.calls = []
         self.alert_override = None
@@ -140,6 +142,24 @@ def test_closure_alert_llm_cap_and_permissions(env):
     assert client.post(f"/api/approvals/{alert_apr['id']}/decision", json={"approve": True}, headers=off).status_code == 204
     cap = next(a for a in snap(client, off)["alerts"] if a["id"] == alert["id"])["capXml"]
     assert "<severity>Severe</severity>" in cap and "<urgency>Immediate</urgency>" in cap  # AC-22
+
+
+def test_photo_only_provider_keeps_templates(env):
+    """Local model (owner decision 2026-11-03): photo check runs, alert writer never does -> templates, source 'template'."""
+    client, ai, _, _ = env
+    ai.writes_alerts = False
+    rep = client.post("/api/reports", headers=login(client, "patrol"),
+                      json={"segmentId": "S-07", "locationText": "x", "photo": {"kind": "sample", "sampleId": "sample-debris"}}).json()
+    assert rep["ai"]["hazardClass"] == "debris"
+    off = login(client, "officer")
+    client.post("/api/reports/REP-0104/confirm", json={"newState": "BLOCKED"}, headers=off)
+    apr = next(a for a in snap(client, off)["approvals"] if a["kind"] == "closure")
+    client.post(f"/api/approvals/{apr['id']}/decision", json={"approve": True, "closureType": "FULL"}, headers=off)
+    texts = snap(client, off)["alerts"][0]["texts"]
+    four = [t for t in texts if t["lang"] in ("en", "hi", "as", "bn")]  # Dimasa stays pending (deferred)
+    assert len(four) == 4 and all(t["source"] == "template" and not t["blocked"] for t in four)
+    assert not any(c[0] == "alerts" for c in ai.calls)
+    assert client.get("/api/health").json()["ai"]["alertWriter"] == "templates"
 
 
 def test_llm_mismatch_blocked(env):

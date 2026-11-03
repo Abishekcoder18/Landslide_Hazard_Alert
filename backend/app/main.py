@@ -80,7 +80,9 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
     if ai is None:
         if not cfg.anthropic_api_key and cfg.ai_provider.lower() == "ollama":
             from .ai_local import OllamaAI
-            ai = OllamaAI(cfg.ollama_model, cfg.ollama_url, cfg.ollama_timeout_s)  # labelled "local:<model>"
+            ai = OllamaAI(cfg.ollama_model, cfg.ollama_url, cfg.ollama_timeout_s)  # photo check only, "local:<model>"
+            if cfg.ollama_text_model.strip().lower() not in ("", "disabled"):
+                log.warning("OLLAMA_TEXT_MODEL=%s ignored: alert text is Claude-only (templates without a key)", cfg.ollama_text_model)
         else:
             ai = ClaudeAI(cfg.anthropic_api_key, cfg.ai_model)  # disabled without a key
     cfg.upload_dir.mkdir(parents=True, exist_ok=True)
@@ -111,7 +113,8 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         seed_if_needed()
-        log.info("AI photo check / alert writer: %s (%s)", "enabled" if ai.enabled else "disabled — no ANTHROPIC_API_KEY", ai.model)
+        log.info("AI photo check: %s (%s); alert writer: %s", "enabled" if ai.photo_enabled else "disabled — manual review",
+                 ai.model, ai.model if ai.writes_alerts else "validated templates (no Claude key)")
         tasks = []
         if cfg.feeds_enabled:
             tasks.append(asyncio.create_task(feeds.every(cfg.sachet_minutes, "sachet", feeds.sachet_job(run, clock))))
@@ -142,10 +145,18 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
             result = fn(wf)
             return result, list(wf.new_alert_ids)
 
-    def ai_available() -> bool:
+    def ai_online() -> bool:
         with store.connect() as conn:
             row = conn.execute(f"SELECT data FROM {store.t('kv')} WHERE key = 'config'").fetchone()
-        return ai.enabled and bool(row and row[0].get("aiServiceOnline", True))
+        return bool(row and row[0].get("aiServiceOnline", True))
+
+    def ai_available() -> bool:
+        """Photo check (FR-21): Claude, or the local model when configured."""
+        return ai.photo_enabled and ai_online()
+
+    def alert_writer_available() -> bool:
+        """Alert writer (FR-28): Claude only; otherwise the validated templates stay."""
+        return ai.writes_alerts and ai_online()
 
     def write_alerts_task(alert_ids: list[str]) -> None:
         """FR-28 language-model pass, outside the request transaction. Validation and blocking happen in the service."""
@@ -164,7 +175,7 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
             run(lambda wf: wf.apply_generated_texts(alert_id, generated, model))
 
     def schedule_alerts(bg: BackgroundTasks, ids: list[str]) -> None:
-        if ids and ai_available():
+        if ids and alert_writer_available():
             bg.add_task(write_alerts_task, ids)
 
     # ---------- endpoints ----------
@@ -172,7 +183,9 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
     def health():
         with store.connect() as conn:
             postgis = conn.execute("SELECT postgis_version()").fetchone()[0]
-        return {"ok": True, "postgis": postgis, "ai": {"enabled": ai.enabled, "model": ai.model}}
+        return {"ok": True, "postgis": postgis, "ai": {"enabled": ai.enabled, "model": ai.model,
+                "photoCheck": ai.model if ai.photo_enabled else None,
+                "alertWriter": ai.model if ai.writes_alerts else "templates"}}
 
     @app.post("/api/auth/login")
     def login(body: LoginBody):

@@ -26,9 +26,12 @@ class Settings:
     sachet_minutes: float = float(os.getenv("SACHET_POLL_MINUTES", "30"))
     anthropic_api_key: str | None = os.getenv("ANTHROPIC_API_KEY") or None
     ai_model: str = os.getenv("AI_MODEL", "claude-sonnet-5-5")
-    # Claude is used whenever ANTHROPIC_API_KEY is set. Without a key, AI_PROVIDER=ollama selects a free local model.
+    # Claude is used whenever ANTHROPIC_API_KEY is set. Without a key, AI_PROVIDER=ollama runs the PHOTO CHECK ONLY on a
+    # free local vision model (owner decision 2026-11-03). Alert text is Claude-only; without a key, validated templates.
     ai_provider: str = os.getenv("AI_PROVIDER", "")
-    ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5vl:7b")
+    ollama_model: str = os.getenv("OLLAMA_VISION_MODEL") or os.getenv("OLLAMA_MODEL") or "qwen2.5vl:7b"
+    # Accepted only as "disabled": local models failed the hi/as/bn alert tests (docs/AI_PROMPT_LOG.md).
+    ollama_text_model: str = os.getenv("OLLAMA_TEXT_MODEL", "disabled")
     ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
     ollama_timeout_s: float = float(os.getenv("OLLAMA_TIMEOUT_S", "180"))
     secret_key: str = os.getenv("SECRET_KEY") or secrets.token_hex(32)

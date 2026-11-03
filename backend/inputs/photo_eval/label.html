@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Photo Labeller</title>
+<style>
+  :root { --bg:#f6f7f9; --fg:#1b1f24; --muted:#5b6470; --card:#fff; --line:#d9dde3; --accent:#1f6feb; --on:#fff; --warn:#b42318; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14171b; --fg:#e8eaed; --muted:#9aa3ad; --card:#1d2126; --line:#333a42; --accent:#4c8dff; --on:#fff; --warn:#ff7a6b; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:16px; }
+  h1 { font-size:18px; margin:0 0 8px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
+  button { font:inherit; padding:8px 12px; border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:6px; cursor:pointer; }
+  button.on { background:var(--accent); color:var(--on); border-color:var(--accent); }
+  button.primary { background:var(--accent); color:var(--on); border-color:var(--accent); }
+  .imgbox { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px; text-align:center; }
+  .imgbox img { max-width:100%; max-height:62vh; object-fit:contain; }
+  .grid { display:grid; grid-template-columns:110px 1fr; gap:6px 10px; align-items:center; }
+  .counts span { display:inline-block; margin-right:12px; }
+  .warn { color:var(--warn); }
+  kbd { border:1px solid var(--line); border-radius:3px; padding:0 4px; font-size:12px; }
+  @media (max-width:600px) { .grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>RESILION 2.0 photo labeller</h1>
+  <p class="muted">1. Click <b>Load labels.csv</b> and pick <code>labels.csv</code> from this folder (or a CSV you exported earlier, to continue).
+    2. For each photo choose a class and, for debris / crack / fallen tree / water, the share of the road width blocked.
+    3. Click <b>Export CSV</b> and save it over <code>backend/inputs/photo_eval/labels.csv</code>.
+    Progress is also kept in this browser between visits.</p>
+  <div class="bar">
+    <label><button type="button" onclick="document.getElementById('f').click()">Load labels.csv</button>
+      <input id="f" type="file" accept=".csv,text/csv" hidden></label>
+    <button type="button" class="primary" id="export">Export CSV</button>
+    <label class="muted"><input type="checkbox" id="onlyOpen"> jump to unlabelled only</label>
+    <span id="status" class="muted"></span>
+  </div>
+  <div id="ui" hidden>
+    <div class="bar">
+      <button type="button" id="prev">&larr; Prev</button>
+      <b id="pos"></b>
+      <button type="button" id="next">Next &rarr;</button>
+      <span id="file" class="muted"></span>
+    </div>
+    <div class="imgbox"><img id="img" alt="photo to label"></div>
+    <div class="grid" style="margin-top:10px">
+      <b>Class</b><div class="bar" id="classes"></div>
+      <b>Road blocked</b><div class="bar" id="shares"></div>
+      <b></b><div class="bar"><button type="button" id="skip">Skip (unusable photo)</button><span id="state" class="muted"></span></div>
+    </div>
+    <p class="muted">Keys: <kbd>1</kbd>–<kbd>6</kbd> class · <kbd>a</kbd> 0% <kbd>s</kbd> 25% <kbd>d</kbd> 50% <kbd>f</kbd> 75% <kbd>g</kbd> 100% ·
+      <kbd>x</kbd> skip · <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> move. Clear and not relevant are 0% automatically.
+      Source and licence: <a id="src" target="_blank" rel="noopener">source page</a> (opens Commons; the file title may hint at a class, so look only after deciding).</p>
+    <div class="counts muted" id="counts"></div>
+  </div>
+</main>
+<script>
+const CLASSES = [["debris","Debris / rocks"],["crack","Crack / subsidence"],["fallen_tree","Fallen tree"],["water","Water on road"],["clear","Clear road"],["not_relevant","Not relevant"]];
+const SHARES = [0,25,50,75,100];
+const FIELDS = ["file","class","blocked_share","source_url","license","author","label_confirmed","notes"];
+const KEY = "resilion2-photo-labels";
+let rows = [], i = 0;
+
+function parseCSV(t) {
+  const out = []; let row = [], f = "", q = false;
+  for (let k = 0; k < t.length; k++) {
+    const c = t[k];
+    if (q) { if (c === '"') { if (t[k+1] === '"') { f += '"'; k++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === ",") { row.push(f); f = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && t[k+1] === "\n") k++; row.push(f); f = ""; if (row.some(x => x !== "")) out.push(row); row = []; }
+    else f += c;
+  }
+  if (f !== "" || row.length) { row.push(f); out.push(row); }
+  const head = out.shift().map(h => h.replace(/^﻿/, ""));
+  return out.map(r => Object.fromEntries(FIELDS.map(h => [h, r[head.indexOf(h)] ?? ""])));
+}
+const esc = v => /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+const toCSV = () => [FIELDS.join(","), ...rows.map(r => FIELDS.map(h => esc(String(r[h] ?? ""))).join(","))].join("\r\n") + "\r\n";
+function save() { try { localStorage.setItem(KEY, JSON.stringify(rows)); } catch (e) {} }
+function done(r) { return r.label_confirmed === "yes" || r.label_confirmed === "skip"; }
+
+function setClass(c) {
+  const r = rows[i];
+  const wasZeroClass = !r.class || r.class === "clear" || r.class === "not_relevant";
+  r.class = c;
+  if (c === "clear" || c === "not_relevant") r.blocked_share = "0";
+  else if (wasZeroClass) r.blocked_share = "";  // a hazard class always needs its own share choice
+  finish(r);
+}
+function setShare(s) { const r = rows[i]; r.blocked_share = String(s); finish(r); }
+function finish(r) {
+  const needShare = r.class && !["clear","not_relevant"].includes(r.class);
+  r.label_confirmed = r.class && (!needShare || r.blocked_share !== "") ? "yes" : "no";
+  save(); render();
+  if (r.label_confirmed === "yes" && (!needShare || r.blocked_share !== "")) setTimeout(() => go(1), 150);
+}
+function skip() { const r = rows[i]; r.class = ""; r.blocked_share = ""; r.label_confirmed = "skip"; save(); go(1); }
+function go(d) {
+  if (!rows.length) return;
+  const only = document.getElementById("onlyOpen").checked;
+  let j = i;
+  for (let n = 0; n < rows.length; n++) {
+    j = Math.min(rows.length - 1, Math.max(0, j + d));
+    if (!only || !done(rows[j]) || j === 0 || j === rows.length - 1) break;
+  }
+  i = j; render();
+}
+function render() {
+  const r = rows[i];
+  document.getElementById("ui").hidden = false;
+  document.getElementById("img").src = r.file;
+  document.getElementById("pos").textContent = `${i + 1} / ${rows.length}`;
+  document.getElementById("file").textContent = r.file;
+  document.getElementById("src").href = r.source_url;
+  document.getElementById("classes").innerHTML = CLASSES.map(([c, l], k) => `<button type="button" class="${r.class === c ? "on" : ""}" data-c="${c}">${k + 1} ${l}</button>`).join("");
+  document.getElementById("shares").innerHTML = SHARES.map(s => `<button type="button" class="${r.blocked_share === String(s) && r.class ? "on" : ""}" data-s="${s}">${s}%</button>`).join("");
+  const st = r.label_confirmed === "yes" ? "labelled" : r.label_confirmed === "skip" ? "skipped" : (r.class ? "<span class='warn'>choose road blocked %</span>" : "not labelled");
+  document.getElementById("state").innerHTML = st;
+  const c = Object.fromEntries(CLASSES.map(([k]) => [k, 0]));
+  let lab = 0, sk = 0;
+  rows.forEach(x => { if (x.label_confirmed === "yes") { lab++; c[x.class]++; } if (x.label_confirmed === "skip") sk++; });
+  document.getElementById("counts").innerHTML = `Labelled ${lab}, skipped ${sk}, open ${rows.length - lab - sk}. Per class (aim ≥ 10): ` +
+    CLASSES.map(([k, l]) => `<span class="${c[k] < 10 ? "warn" : ""}">${l}: ${c[k]}</span>`).join("");
+  document.getElementById("status").textContent = "";
+}
+document.getElementById("classes").addEventListener("click", e => { const c = e.target.dataset.c; if (c) setClass(c); });
+document.getElementById("shares").addEventListener("click", e => { const s = e.target.dataset.s; if (s !== undefined) setShare(s); });
+document.getElementById("prev").onclick = () => go(-1);
+document.getElementById("next").onclick = () => go(1);
+document.getElementById("skip").onclick = skip;
+document.getElementById("export").onclick = () => {
+  if (!rows.length) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([toCSV()], { type: "text/csv;charset=utf-8" }));
+  a.download = "labels.csv"; a.click();
+  document.getElementById("status").textContent = "Exported labels.csv — save it over backend/inputs/photo_eval/labels.csv";
+};
+document.getElementById("f").addEventListener("change", e => {
+  const file = e.target.files[0]; if (!file) return;
+  file.text().then(t => {
+    const loaded = parseCSV(t);
+    let stored = []; try { stored = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (err) {}
+    const prev = Object.fromEntries(stored.map(r => [r.file, r]));
+    // A label in the loaded CSV wins; otherwise keep work saved in this browser.
+    rows = loaded.map(r => (!done(r) && prev[r.file] && done(prev[r.file])) ? { ...r, class: prev[r.file].class, blocked_share: prev[r.file].blocked_share, label_confirmed: prev[r.file].label_confirmed } : r);
+    const first = rows.findIndex(r => !done(r)); i = first < 0 ? 0 : first;
+    save(); render();
+  });
+});
+document.addEventListener("keydown", e => {
+  if (!rows.length || e.target.tagName === "INPUT") return;
+  const k = e.key.toLowerCase();
+  if (k >= "1" && k <= "6") setClass(CLASSES[+k - 1][0]);
+  else if ("asdfg".includes(k) && k.length === 1) setShare(SHARES["asdfg".indexOf(k)]);
+  else if (k === "x") skip();
+  else if (e.key === "ArrowRight") go(1);
+  else if (e.key === "ArrowLeft") go(-1);
+});
+</script>
+</body>
+</html>

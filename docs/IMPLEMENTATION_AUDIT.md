@@ -49,7 +49,7 @@ Nothing here is a field result.
 | AC-18 | BR-07 AI alone never changes state | **T** | `server.test.ts`, `test_real_corridor.py` | |
 | AC-19 | BR-10 injected note has no effect | **T** (stand-in model) | `test_api.py`, `test_ai.py` | Re-check with a real key. |
 | AC-20 | FR-26 AI unavailable → manual review | **T U** | `test_api.py`, `35-officer-review-real.png` | |
-| AC-21 | FR-27/28/30 alerts match or are blocked | **T U** | `alerts.test.ts`, `test_api.py`, `38-*.png` | Real segment alert "NH-27 NH27-DH-108 (Retzol) CLOSED…", validated 4/4 (template). Claude writer tested with a stand-in model only. |
+| AC-21 | FR-27/28/30 alerts match or are blocked | **T U** (templates + validator) | `alerts.test.ts`, `test_api.py`, `38-*.png` | Real segment alert "NH-27 NH27-DH-108 (Retzol) CLOSED…", validated 4/4 (template). Alert text = templates + validator; LLM writer is Claude-only and **pending a Claude key** (local models not used for alert text, owner decision 2026-11-03). |
 | AC-22 | FR-31 CAP Severe/Immediate/certainty/area | **T U** | `test_real_corridor.py`, `39-cap-real.png` | |
 | AC-23 | FR-33 patrol refused | **T U** | `permissions.test.ts`, `test_api.py` | Signed token, no password yet. |
 | AC-24 | FR-08 one zone per direction; decision inside geofence | **P T U** | `corridor_data.py`, `test_real_corridor.py` | 18 zones = one per direction for 9 risky segments (≥ 5 past landslides within 500 m and model score ≥ 0.6, **assumption**). Geofence used for map ring and CAP area; no vehicle location by design. |
@@ -121,8 +121,10 @@ Delegated by the owner (Abishek) and implemented as stated; BR-01..BR-12 are unc
    171 ms; Corridor page ready in 2.0 s, Decisions in 0.8 s (Chromium, page reload, dev server).
 3. **Approval status "withdrawn"** for a CLOSE recommendation the rules no longer support (audit "CLOSE recommendation
    withdrawn", decided by "Decision engine"); the engine never approves.
-4. **Optional free local model (Ollama)** may stand in for the photo check and alert writer when no
-   `ANTHROPIC_API_KEY` is set, always labelled "Local model", never "Claude". This changes PRD §9 (model) for that case.
+4. **Optional free local model (Ollama)** may stand in for the **photo check only** when no `ANTHROPIC_API_KEY` is set,
+   always labelled "Local model", never "Claude". This changes PRD §9 (model) for that case. Revised 2026-11-03: the
+   alert writer is Claude-only; without a key the validated templates are used (local models failed the hi/as/bn tests,
+   `docs/AI_PROMPT_LOG.md`).
 
 ## Real-data strengthening, phase status (2026-11-03)
 
@@ -134,7 +136,7 @@ Delegated by the owner (Abishek) and implemented as stated; BR-01..BR-12 are unc
 | 4 Open-Meteo rainfall (archive + live) | Not started — waits for "incidents OK" as instructed | — |
 | 5 Back-test | Not started — needs Phases 3–4 | — |
 | 6 SACHET IMD warnings | Done — public feed works; parser tested on real samples; raise-only into `imdWarning` | `backend/app/sachet.py`, `backend/tests/test_sachet.py`, `backend/inputs/sachet_sample.*` |
-| 7 AI provider / photo evaluation | Partial — local provider + labels done and tested with a stub; `qwen2.5vl:7b` download failed (DNS); photo set script not run (owner decision pending); no real-model evaluation | `backend/app/ai_local.py`, `docs/AI_PROMPT_LOG.md` |
+| 7 AI provider / photo evaluation | Partial — local model is **photo check only** (owner decision 2026-11-03: local models failed the hi/as/bn alert tests; alert writer Claude-only, templates without a key); `qwen2.5vl:7b` installed and smoke-tested; 142 Commons photos fetched, labeller `label.html` ready; **awaiting owner labels** before `eval_photo_check.py` | `backend/app/ai_local.py`, `backend/inputs/photo_eval/`, `docs/AI_PROMPT_LOG.md` |
 | 8 OSRM diversions | Blocked — Docker installed but engine not running; not started on this low-memory laptop without the owner | — |
 | 9 Translation review sheet | Done — 45 rows | `backend/inputs/translations_review.csv` |
 | 10 Verify and document | Done for the completed phases | `docs/evidence/verification-2026-11-03.txt` |

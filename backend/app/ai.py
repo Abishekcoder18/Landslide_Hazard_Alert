@@ -79,6 +79,9 @@ class ClaudeAI:
         self.model = model
         self.enabled = bool(api_key)
         self.client = anthropic.Anthropic(api_key=api_key, timeout=timeout_s, max_retries=2) if api_key else None
+        # Claude does both AI uses; without a key neither runs (manual review / plain templates).
+        self.photo_enabled = self.enabled
+        self.writes_alerts = self.enabled
 
     def _call(self, *, system: str, content: list, schema: dict, effort: str, max_tokens: int) -> tuple[dict, str]:
         if not self.client:
