@@ -82,11 +82,17 @@ def run_report_checks(
     return checks
 
 
-def route_report(checks: dict, ai: Optional[dict]) -> str:
+TRUSTED_REPORTERS = ("patrol", "officer", "road_engineer")
+
+
+def route_report(checks: dict, ai: Optional[dict], reporter_role: Optional[str] = None, confidence_threshold: float = 0.7) -> str:
+    """Port of routeReport: a "clear" / "not_relevant" photo is only logged when the reporter is the public AND the model
+    is confident; from field staff or below the threshold it goes to the officer queue (BR-07)."""
     if not checks["insideCorridor"] or not checks["recent"]:
         return "flagged"
     if not ai:
         return "manual_review"
     if ai["hazardClass"] in ("clear", "not_relevant"):
-        return "log_only"
+        trusted = reporter_role in TRUSTED_REPORTERS
+        return "officer_queue" if trusted or ai["confidence"] < confidence_threshold else "log_only"
     return "officer_queue"

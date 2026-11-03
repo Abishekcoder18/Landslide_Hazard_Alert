@@ -133,7 +133,7 @@ export class MockServer {
     };
     for (const r of seedReports(now)) {
       const checks = runReportChecks(r, this.s.reports, Object.values(segments), config, now);
-      const report: Report = { ...r, checks, route: routeReport(checks, r.ai), status: checks.duplicateOf ? 'corroborated' : 'unverified' };
+      const report: Report = { ...r, checks, route: routeReport(checks, r.ai, r.reporterRole, config.aiConfidenceThreshold), status: checks.duplicateOf ? 'corroborated' : 'unverified' };
       this.s.reports.unshift(report);
     }
     this.audit('System', 'system', 'Sample data loaded', 'Initial corridor NH-27 Dima Hasao · sample inputs');
@@ -385,7 +385,7 @@ export class MockServer {
       note: input.note
     };
     const checks = runReportChecks(base, this.s.reports, Object.values(this.s.segments), this.s.config, this.now());
-    const route = routeReport(checks, ai);
+    const route = routeReport(checks, ai, session.role, this.s.config.aiConfidenceThreshold);
     const report: Report = { ...base, ai, aiError, checks, route, status: checks.duplicateOf ? 'corroborated' : 'unverified', queuedAt: this.iso() };
     this.s.reports.unshift(report);
     this.audit(this.actor(session), session.role, 'Report submitted', `${report.id} · ${report.segmentId} · ${route}`, { entity: report.id });

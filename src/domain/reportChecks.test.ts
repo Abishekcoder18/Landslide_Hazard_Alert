@@ -58,3 +58,16 @@ test('FR-23: debris/crack to officer queue; clear/not relevant logged only; queu
   const b = { ...asReport(input({ id: 'B' }), 'g'), ai: { ...debris, confidence: 0.95 } };
   assert.deepEqual(sortQueue([a, b]).map(r => r.id), ['B', 'A']);
 });
+
+test('FR-23 / BR-07: a model "clear" never hides a hazard from field staff or at low confidence', () => {
+  const c = runReportChecks(input(), [], SEGS, DEFAULT_CONFIG, NOW);
+  const t = DEFAULT_CONFIG.aiConfidenceThreshold;
+  for (const hazardClass of ['clear', 'not_relevant'] as const) {
+    const sure = { ...debris, hazardClass, confidence: 0.95 };
+    for (const role of ['patrol', 'officer', 'road_engineer'] as const) assert.equal(routeReport(c, sure, role, t), 'officer_queue', role);
+    assert.equal(routeReport(c, sure, 'public_reporter', t), 'log_only');
+    assert.equal(routeReport(c, { ...sure, confidence: t - 0.01 }, 'public_reporter', t), 'officer_queue');
+    assert.equal(routeReport(c, { ...sure, confidence: t }, 'public_reporter', t), 'log_only');
+  }
+  assert.equal(routeReport(c, debris, 'public_reporter', t), 'officer_queue');
+});

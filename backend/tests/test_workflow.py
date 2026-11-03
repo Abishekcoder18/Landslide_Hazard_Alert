@@ -241,3 +241,27 @@ def test_offcorridor_segment_never_changes_corridor_decisions():
     e.wf.recompute("test: diversion-road segment added")
     after = {d["zoneId"]: d["result"] for d in e.snap()["decisions"]}
     assert after == before
+
+
+# ---------- FR-23 / BR-07: a model "clear" never hides a hazard (mirrors reportChecks.test.ts) ----------
+def test_clear_never_hides_hazard_from_field_staff_or_low_confidence():
+    from app.domain.defaults import DEFAULT_CONFIG
+    from app.domain.report_checks import route_report
+    c = {"insideCorridor": True, "recent": True}
+    t = DEFAULT_CONFIG["aiConfidenceThreshold"]
+    for cls in ("clear", "not_relevant"):
+        sure = {**AI_DEBRIS, "hazardClass": cls, "confidence": 0.95}
+        for role in ("patrol", "officer", "road_engineer"):
+            assert route_report(c, sure, role, t) == "officer_queue", role
+        assert route_report(c, sure, "public_reporter", t) == "log_only"
+        assert route_report(c, {**sure, "confidence": t - 0.01}, "public_reporter", t) == "officer_queue"
+        assert route_report(c, {**sure, "confidence": t}, "public_reporter", t) == "log_only"
+    assert route_report(c, AI_DEBRIS, "public_reporter", t) == "officer_queue"
+
+
+def test_patrol_clear_report_goes_to_officer_queue_public_confident_clear_logged():
+    e = Env()
+    clear = {**AI_DEBRIS, "hazardClass": "clear", "blockedShare": 0, "confidence": 0.95}
+    assert e.wf.submit_report(user("patrol"), DEBRIS, "x", clear, None)["route"] == "officer_queue"
+    assert e.wf.submit_report(user("public_reporter"), DEBRIS, "x", clear, None)["route"] == "log_only"
+    assert e.wf.submit_report(user("public_reporter"), DEBRIS, "x", {**clear, "confidence": 0.5}, None)["route"] == "officer_queue"

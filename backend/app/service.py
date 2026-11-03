@@ -195,7 +195,7 @@ class Workflow:
             return
         for r in seed_reports(now):
             checks = run_report_checks(r, self.s["reports"], list(self.s["segments"].values()), self.s["config"], now, self.corridor_distance)
-            self.s["reports"].insert(0, {**r, "checks": checks, "route": route_report(checks, r["ai"]),
+            self.s["reports"].insert(0, {**r, "checks": checks, "route": route_report(checks, r["ai"], r.get("reporterRole"), self.s["config"]["aiConfidenceThreshold"]),
                                          "status": "corroborated" if checks.get("duplicateOf") else "unverified"})
         self.audit("System", "system", "Sample data loaded", "Initial corridor NH-27 Dima Hasao · sample inputs")
         self.recompute("Initial evaluation")
@@ -400,7 +400,7 @@ class Workflow:
             "note": inp.get("note", ""),  # BR-10: stored as data only.
         }
         checks = run_report_checks(base, self.s["reports"], list(self.s["segments"].values()), self.s["config"], self.now(), self.corridor_distance)
-        route = route_report(checks, ai)
+        route = route_report(checks, ai, session["role"], self.s["config"]["aiConfidenceThreshold"])
         report = {**base, "ai": ai, "checks": checks, "route": route,
                   "status": "corroborated" if checks.get("duplicateOf") else "unverified", "queuedAt": to_iso(queued_at or self.now())}
         if ai_error:

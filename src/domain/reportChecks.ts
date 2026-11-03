@@ -1,4 +1,4 @@
-import { AiClassification, Config, Report, ReportChecks, ReportRoute, Segment } from '../types';
+import { AiClassification, Config, Report, ReportChecks, ReportRoute, Role, Segment } from '../types';
 
 /** Haversine distance in km. */
 export function distanceKm(a: [number, number], b: [number, number]): number {
@@ -91,10 +91,23 @@ export function runReportChecks(
  * - clear / not relevant -> logged only.
  * - debris, crack (and other hazards) -> officer queue, ordered by confidence.
  */
-export function routeReport(checks: ReportChecks, ai: AiClassification | null): ReportRoute {
+/** Reporters whose photo is never only logged on the model's word: field staff (patrol, officer, road engineer). */
+export const TRUSTED_REPORTERS: Role[] = ['patrol', 'officer', 'road_engineer'];
+
+/**
+ * FR-22/23 routing. A "clear" / "not_relevant" photo is only logged when the reporter is the public AND the model is
+ * confident; from field staff, or below `confidenceThreshold`, it goes to the officer queue, so a model "clear" can
+ * never hide a hazard a trusted reporter photographed (BR-07: the model never decides).
+ */
+export function routeReport(
+  checks: ReportChecks, ai: AiClassification | null, reporterRole?: Role, confidenceThreshold = 0.7
+): ReportRoute {
   if (!checks.insideCorridor || !checks.recent) return 'flagged';
   if (!ai) return 'manual_review';
-  if (ai.hazardClass === 'clear' || ai.hazardClass === 'not_relevant') return 'log_only';
+  if (ai.hazardClass === 'clear' || ai.hazardClass === 'not_relevant') {
+    const trusted = reporterRole !== undefined && TRUSTED_REPORTERS.includes(reporterRole);
+    return trusted || ai.confidence < confidenceThreshold ? 'officer_queue' : 'log_only';
+  }
   return 'officer_queue';
 }
 

@@ -260,3 +260,12 @@ test('FR-31: the CAP audience includes zones that hold because the segment is ah
   snap = server.snapshot();
   assert.match(snap.alerts.find(a => a.id === alert.id)!.capXml ?? '', /AZ-06N/);
 });
+
+test('FR-23 / BR-07: a patrol photo the model calls clear goes to the officer queue', () => {
+  const { server, as } = setup();
+  const r = server.submitReport(as('patrol'), {
+    segmentId: 'S-07', lat: 25.11, lon: 92.94, locationText: 'x', note: '', photo: { kind: 'sample', sampleId: 'sample-clear' }
+  });
+  assert.equal(r.ai?.hazardClass, 'clear');
+  assert.equal(r.route, 'officer_queue');
+});
