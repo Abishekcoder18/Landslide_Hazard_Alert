@@ -34,7 +34,7 @@ export const SegmentDrawer: React.FC<{ segmentId: string | null; onClose: () => 
   const v = (n: number | null, unit = '') => (n === null ? <span className="text-[#9B2C2C]">Missing</span> : `${n}${unit}`);
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-[1200]">
       <div className="absolute inset-0 bg-black/20" onClick={onClose} />
       <aside className="absolute inset-y-0 right-0 w-full max-w-md bg-white border-l border-[#E7E3DA] flex flex-col shadow-xl" aria-label={`Segment ${seg.id}`}>
         <div className="h-14 px-5 border-b border-[#E7E3DA] flex items-center justify-between shrink-0">

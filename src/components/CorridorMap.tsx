@@ -215,7 +215,7 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
   }, [viewMode, segments, holdingPoints, zones, selectedSegmentId]);
 
   return (
-    <div className={`relative rounded-lg border border-[#E7E3DA] overflow-hidden bg-white ${heightClass}`}>
+    <div className={`relative isolate rounded-lg border border-[#E7E3DA] overflow-hidden bg-white ${heightClass}`}>
       
       {/* Top Map Toolbar */}
       <div className="absolute top-3 left-3 z-[1000] flex items-center gap-2 bg-white/95 px-3 py-1.5 rounded-lg border border-[#E7E3DA] shadow-xs text-xs font-medium text-[#1F2933]">
