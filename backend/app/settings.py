@@ -19,11 +19,13 @@ class Settings:
     db_schema: str = os.getenv("DB_SCHEMA", "resilion2")
     # "auto": real NH-27 corridor from PostGIS when loaded (backend/scripts), else the sample seed. "sample": always sample.
     corridor_source: str = os.getenv("CORRIDOR_SOURCE", "auto")
-    # IMD rainfall date used for the real corridor's rainfall inputs (historical scenario, shown with its date).
+    # Rainfall date for the real corridor: YYYY-MM-DD (IMD 2010-2025, Open-Meteo archive after) or "live" (Open-Meteo).
     scenario_date: str = os.getenv("SCENARIO_DATE", "2022-05-10")
     # Background feeds (SACHET IMD warnings, live rainfall). Off unless FEEDS_ENABLED=true (tests never poll).
     feeds_enabled: bool = os.getenv("FEEDS_ENABLED", "false").lower() == "true"
     sachet_minutes: float = float(os.getenv("SACHET_POLL_MINUTES", "30"))
+    # Open-Meteo live rainfall poll; used only while the rainfall date is "live" (SCENARIO_DATE=live or Configuration).
+    rain_minutes: float = float(os.getenv("RAIN_POLL_MINUTES", "60"))
     anthropic_api_key: str | None = os.getenv("ANTHROPIC_API_KEY") or None
     ai_model: str = os.getenv("AI_MODEL", "claude-sonnet-5-5")
     # Claude is used whenever ANTHROPIC_API_KEY is set. Without a key, AI_PROVIDER=ollama runs the PHOTO CHECK ONLY on a

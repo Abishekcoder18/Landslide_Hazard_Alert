@@ -240,3 +240,46 @@ def test_sachet_warning_raises_never_lowers_officer(env):
     assert by["NH27-DH-108"]["imdWarning"] == "RED" and by["NH27-DH-108"]["imdWarningSource"] == "Officer"
     assert by["NH27-DH-001"]["imdWarning"] == "NONE"
     assert any(a["action"] == "IMD warning updated" for a in s["audit"])
+
+def test_phase4_openmeteo_archive_and_live(env):
+    """Phase 4: dates after the IMD data use the Open-Meteo archive; "live" uses Open-Meteo rolling totals with the
+    fetch time as updatedAt, so a stopped feed turns into No data (BR-06). Synthetic rows, no network."""
+    from datetime import date as d_
+
+    from app import openmeteo
+    from app.service import Workflow
+    client, _, clock, store = env
+    admin, off = login(client, "admin"), login(client, "officer")
+    with store.connect() as conn:
+        openmeteo.ensure_tables(conn, TEST)
+        conn.execute(f"TRUNCATE {TEST}.openmeteo_rain_daily, {TEST}.openmeteo_rain_live")
+        cells = [c for (c,) in conn.execute(f"SELECT DISTINCT data->>'rainCellId' FROM {TEST}.segment_features").fetchall()]
+        openmeteo.store_archive(conn, TEST, [(c, d_(2026, 6, 21) - timedelta(days=i), 40.0) for c in cells for i in range(7)])
+        conn.commit()
+    assert client.patch("/api/config", json={"scenarioDate": "2026-06-21"}, headers=admin).status_code == 204
+    s = snap(client, off)
+    i = seg(s, SEG)["inputs"]
+    assert i["rainfall24h"] == 40.0 and i["rainfall7d"] == 280.0 and i["sources"]["rainfall"] == "Open-Meteo archive · 2026-06-21"
+    assert client.patch("/api/config", json={"scenarioDate": "2026-03-01"}, headers=admin).status_code == 400  # no archive rows
+
+    # live: nothing fetched yet -> No data, never a made-up value
+    assert client.patch("/api/config", json={"scenarioDate": "live"}, headers=admin).status_code == 204
+    s = snap(client, off)
+    assert all(x["riskLevel"] == "NO_DATA" for x in s["segments"])
+    fetched = clock["now"]
+    with store.connect() as conn:
+        openmeteo.store_live(conn, TEST, {c: {"rainfall24h": 120.0, "rainfall3d": 200.0, "rainfall7d": 260.0, "lastHour": fetched} for c in cells}, fetched)
+        conn.commit()
+    with store.unit_of_work() as (conn, state):
+        from app.main import corridor_data  # same feed the app uses
+        feed = lambda day: corridor_data.segment_inputs(conn, TEST, day if day == "live" else d_.fromisoformat(day), clock["now"])  # noqa: E731
+        assert Workflow(state, lambda: clock["now"], feed=feed).apply_rain_feed()
+    s = snap(client, off)
+    i = seg(s, SEG)["inputs"]
+    assert i["rainfall24h"] == 120.0 and i["rainfallDate"] == "live" and i["sources"]["rainfall"].startswith("Open-Meteo live · fetched")
+    assert all(x["riskLevel"] != "NO_DATA" for x in s["segments"])
+    assert any(a["action"] == "Rainfall updated" for a in s["audit"])
+    # feed stops: after staleInputHours the inputs are stale -> No data (BR-06), not silently refreshed
+    clock["now"] += timedelta(hours=s["config"]["staleInputHours"] + 1)
+    s = snap(client, off)
+    assert all(x["riskLevel"] == "NO_DATA" for x in s["segments"])

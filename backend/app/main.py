@@ -87,9 +87,12 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
             ai = ClaudeAI(cfg.anthropic_api_key, cfg.ai_model)  # disabled without a key
     cfg.upload_dir.mkdir(parents=True, exist_ok=True)
 
+    def scenario_of(day: str):
+        return day if day == "live" else date.fromisoformat(day)
+
     def feed_for(conn) -> Callable[[str], dict]:
         """Input feed for the real corridor: re-reads terrain, model score and IMD rainfall from PostGIS."""
-        return lambda day: corridor_data.segment_inputs(conn, store.schema, date.fromisoformat(day), clock())
+        return lambda day: corridor_data.segment_inputs(conn, store.schema, scenario_of(day), clock())
 
     def seed_if_needed(wipe: bool = False) -> None:
         """Seed (optionally after wiping) in ONE transaction under the corridor lock, so no request or feed ever sees
@@ -102,7 +105,7 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
             if not store.is_seeded(conn):
                 corridor = None
                 if cfg.corridor_source == "auto":
-                    corridor = corridor_data.load_corridor(conn, store.schema, date.fromisoformat(cfg.scenario_date), clock())
+                    corridor = corridor_data.load_corridor(conn, store.schema, scenario_of(cfg.scenario_date), clock())
                 fresh = new_state(clock(), corridor)
                 # Segments are not saved yet, so seeding uses the in-memory corridor check (same geometry).
                 Workflow(fresh, clock, cfg.timezone, None, feed_for(conn)).seed_initial()
@@ -118,6 +121,7 @@ def create_app(cfg: Settings = default_settings, store: Optional[Store] = None, 
         tasks = []
         if cfg.feeds_enabled:
             tasks.append(asyncio.create_task(feeds.every(cfg.sachet_minutes, "sachet", feeds.sachet_job(run, clock))))
+            tasks.append(asyncio.create_task(feeds.every(cfg.rain_minutes, "rainfall", feeds.rain_job(run, store, clock))))
         yield
         for t in tasks:
             t.cancel()

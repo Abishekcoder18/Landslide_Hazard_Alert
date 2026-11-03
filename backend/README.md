@@ -126,6 +126,22 @@ Only alerts in effect, from IMD or the Assam SDMA, of a rainfall/thunderstorm/la
 the colour is SACHET's own `severity_color`. Parser and rules: `app/sachet.py`, tests `tests/test_sachet.py` on real
 samples in `inputs/sachet_sample.xml|json`. GSI bulletins stay manual (no API).
 
+## Rainfall: IMD, Open-Meteo archive, Open-Meteo live
+
+The rainfall date (Configuration, or `SCENARIO_DATE`) picks the source for every segment's 24 h / 3-day / 7-day
+rainfall, always from the segment's own 0.25° rain cell, and the UI shows the source:
+
+- 2010-01-07 … 2025-12-31: IMD gridded daily rainfall (`imd_rain_daily`).
+- 2026 dates: Open-Meteo archive (`openmeteo_rain_daily`). Load / update with
+  `backend\.venv-data\Scripts\python.exe backend\scripts\fetch_openmeteo.py` (no key; the archive lags ~5 days).
+  A date with no archive rows is refused.
+- `live`: Open-Meteo hourly precipitation, rolling totals to the last completed hour. With `FEEDS_ENABLED=true` the
+  server fetches every `RAIN_POLL_MINUTES` (default 60) while the date is `live`. `updatedAt` is the fetch time, so if
+  the feed stops, BR-06 turns the inputs stale (No data) after `staleInputHours`. Until the first fetch: No data.
+
+Open-Meteo and IMD differ a lot on heavy-rain days (see `docs/DATA_INVENTORY.md`), so Open-Meteo is used only where IMD
+has no data.
+
 ## Optional free local model (Ollama) - photo check only
 
 Only when `ANTHROPIC_API_KEY` is empty: set `AI_PROVIDER=ollama` (optionally `OLLAMA_VISION_MODEL`, default

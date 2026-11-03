@@ -27,7 +27,7 @@ export interface SegmentInputs {
   /** 0–1 landslide susceptibility from the trained model; replaces the category in the Risk Index when present. */
   susceptibilityScore?: number | null;
   modelVersion?: string;
-  /** Date of the IMD rainfall used (historical scenario), e.g. "2022-05-15". Absent for sample values. */
+  /** Rainfall date used: "YYYY-MM-DD" (IMD 2010-2025, Open-Meteo archive after) or "live" (Open-Meteo). Absent for sample values. */
   rainfallDate?: string;
   /** Short source labels shown in the segment drawer. */
   sources?: { terrain?: string; rainfall?: string; history?: string };
@@ -316,7 +316,7 @@ export interface Config {
   escalationMinutes: number;
   retentionDays: number;
   aiServiceOnline: boolean;
-  /** Real corridor only: date of the IMD rainfall used for the rainfall inputs (YYYY-MM-DD). */
+  /** Real corridor only: rainfall date for the rainfall inputs (YYYY-MM-DD, or "live" for Open-Meteo live). */
   scenarioDate?: string;
 }
 

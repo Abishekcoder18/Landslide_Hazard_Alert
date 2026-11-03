@@ -66,6 +66,7 @@ FEED_FIELDS = ("susceptibility", "susceptibilityScore", "modelVersion", "slopeDe
                "rainfallDate", "pastIncidents", "sources")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 IMD_FIRST, IMD_LAST = date(2010, 1, 7), date(2025, 12, 31)  # 7-day totals need 6 earlier days of IMD data
+LIVE = "live"  # rainfall date "live": Open-Meteo rolling totals (app/openmeteo.py)
 
 
 class Workflow:
@@ -134,14 +135,30 @@ class Workflow:
         return self.s.get("corridor", {}).get("source") == "postgis"
 
     def refresh_inputs(self, sids: list[str]) -> bool:
-        """Re-read inputs from PostGIS for the configured rainfall date (keeps officer-set IMD warning / GSI bulletin)."""
+        """Re-read inputs from PostGIS for the configured rainfall date (keeps officer-set IMD warning / GSI bulletin).
+        updatedAt comes from the feed: the read time for a historical date, the fetch time in live mode (BR-06)."""
         if not (self.real and self.feed and sids):
             return False
         fresh = self.feed(self.s["config"]["scenarioDate"])
         for sid in sids:
             if sid in fresh:
                 seg = self.s["segments"][sid]
-                seg["inputs"] = {**seg["inputs"], **{k: fresh[sid].get(k) for k in FEED_FIELDS}, "updatedAt": self.iso(), "sample": False}
+                seg["inputs"] = {**seg["inputs"], **{k: fresh[sid].get(k) for k in FEED_FIELDS},
+                                 "updatedAt": fresh[sid].get("updatedAt") or self.iso(), "sample": False}
+        return True
+
+    def apply_rain_feed(self) -> bool:
+        """Live rainfall (Open-Meteo, stored by the feed job) -> every segment, only when the rainfall date is "live"."""
+        if not (self.real and self.s["config"].get("scenarioDate") == LIVE):
+            return False
+        sids = list(self.s["segments"])
+        self.refresh_inputs(sids)
+        now = self.now()
+        for sid in sids:
+            self.s["segments"][sid] = apply_risk(self.s["segments"][sid], self.s["config"], now)
+        src = next(iter(self.s["segments"].values()))["inputs"].get("sources", {}).get("rainfall", "")
+        self.audit("Input feed", "system", "Rainfall updated", f"{len(sids)} segments · {src}")
+        self.recompute("Rainfall (Open-Meteo live)")
         return True
 
     def apply_imd_feed(self, level: str, label: str) -> bool:
@@ -569,14 +586,17 @@ class Workflow:
         if new_day is not None:
             if not self.real:
                 raise ApiError("Rainfall date applies to the real corridor data only")
-            try:
-                if not (isinstance(new_day, str) and DATE_RE.fullmatch(new_day)):
-                    raise ValueError
-                d = date.fromisoformat(new_day)
-            except ValueError as e:
-                raise ApiError("Rainfall date must be YYYY-MM-DD") from e
-            if not (IMD_FIRST <= d <= IMD_LAST):
-                raise ApiError(f"Rainfall date must be between {IMD_FIRST} and {IMD_LAST} (IMD data loaded)")
+            if new_day != LIVE:
+                try:
+                    if not (isinstance(new_day, str) and DATE_RE.fullmatch(new_day)):
+                        raise ValueError
+                    d = date.fromisoformat(new_day)
+                except ValueError as e:
+                    raise ApiError("Rainfall date must be YYYY-MM-DD or live") from e
+                if not (IMD_FIRST <= d <= self.now().date()):
+                    raise ApiError(f"Rainfall date must be between {IMD_FIRST} and today, or live")
+                if d > IMD_LAST and self.feed and not any(v.get("rainfall24h") is not None for v in self.feed(new_day).values()):
+                    raise ApiError(f"No Open-Meteo archive rainfall for {new_day} - run backend/scripts/fetch_openmeteo.py")
             cfg["scenarioDate"] = new_day
         cfg["weights"] = {**self.s["config"]["weights"], **(patch.get("weights") or {})}
         cfg["thresholds"] = {**self.s["config"]["thresholds"], **(patch.get("thresholds") or {})}

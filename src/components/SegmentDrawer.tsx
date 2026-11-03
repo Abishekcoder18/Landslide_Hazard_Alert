@@ -96,7 +96,13 @@ export const SegmentDrawer: React.FC<{ segmentId: string | null; onClose: () => 
               <Row label="Rain 24h / 3d / 7d">
                 <span className="font-mono">{v(i.rainfall24h)} / {v(i.rainfall3d)} / {v(i.rainfall7d)} mm</span>
               </Row>
-              {i.rainfallDate && <Row label="Rainfall date"><span className="font-mono">IMD · {fmtDay(i.rainfallDate)}</span></Row>}
+              {i.rainfallDate && (
+                <Row label="Rainfall">
+                  <span className="font-mono">
+                    {i.sources?.rainfall ?? (i.rainfallDate === 'live' ? 'Open-Meteo live' : `IMD · ${fmtDay(i.rainfallDate)}`)}
+                  </span>
+                </Row>
+              )}
               <Row label={i.sources?.history ? 'Past landslides ≤ 500 m' : 'Past incidents'}>{v(i.pastIncidents)}</Row>
               <Row label="IMD warning">
                 <span className="inline-flex flex-col items-end">

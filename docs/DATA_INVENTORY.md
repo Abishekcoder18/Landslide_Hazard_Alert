@@ -1249,6 +1249,14 @@ Dima Hasao bbox used: lon 92.55–93.45 E, lat 24.95–25.95 N.
 | Copernicus DEM GLO-30, tiles N24/N25 × E092/E093 | slope, aspect, curvature, relief (model + segment features) | 30 m, whole district | Copernicus DEM licence (free, attribution) |
 | ESA WorldCover 2021 v200 | land-cover shares (model + segment features) | district window read at ~20 m | CC BY 4.0 |
 | IMD gridded daily rainfall 0.25° (Pai et al. 2014) | 24 h / 3-day / 7-day rainfall per segment for a dated scenario | 2010-01-01 – 2025-12-31, 30 cells around the district | IMD, free for research |
+| Open-Meteo Historical Weather API (archive, ERA5 family), `precipitation_sum` | rainfall for dates after the IMD data (2026), same 8 rain cells as the segments | 2025-12-25 – 5 days before today; `backend/scripts/fetch_openmeteo.py` → `resilion2.openmeteo_rain_daily` | CC BY 4.0 (Open-Meteo; data © ECMWF / Copernicus) |
+| Open-Meteo Forecast API, hourly `precipitation`, `past_days=7` | live rolling 24 h / 3-day / 7-day rainfall (rainfall date "live") | last completed hour; polled every `RAIN_POLL_MINUTES` → `resilion2.openmeteo_rain_live` | CC BY 4.0 |
+
+**IMD vs Open-Meteo (same cells, May 2022):** the two sources disagree strongly on heavy-rain days. Example, cell
+25.25N 93.00E: 12 May IMD 99.5 mm vs Open-Meteo 18.2 mm; 14 May IMD 140.6 mm vs 21.0 mm; at 25.00N 92.75E, 14 May IMD
+162.2 mm vs 97.6 mm. Open-Meteo days are midnight–midnight IST; IMD days are 08:30–08:30 IST, so a one-day shift is
+possible. Open-Meteo is therefore used **only where IMD has no data** (2026 dates and live), and every rainfall value is
+labelled with its source in the UI. Rainfall thresholds were not re-tuned for Open-Meteo.
 
 Priority team datasets (RESILION 1 final) and their role: `assam_road_dataset_final.csv` (NH-27 selection, bridges, all-road distance), `Assam_DEM_Terrain_Road_Features.csv` (per-road terrain; cross-check r = 0.85 against DEM slope on NH-27 segments), `assam_landslide_road_events.csv` (labels and segment history), `Assam_Flood_ML_Ready_FINAL.csv` (district-level flood context: 75 events name Dima Hasao, coordinates are district HQs), `assam_disruption_road_events.csv` (5 Dima Hasao rows in 2022, none with coordinates).
 

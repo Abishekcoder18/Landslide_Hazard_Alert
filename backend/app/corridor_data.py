@@ -10,7 +10,9 @@ Inputs for the Risk Index:
   susceptibilityScore  model score (replaces the categorical susceptibility; category derived for display)
   slopeDeg             90th percentile of DEM slope within 100 m of the segment (hillslope above/below the road)
   pastIncidents        landslides within 500 m (RESILION 1 inventory)
-  rainfall24h/3d/7d    IMD rainfall of the nearest 0.25 deg cell for the scenario date - historical, labelled with its date
+  rainfall24h/3d/7d    rainfall of the segment's 0.25 deg cell for the configured rainfall date, labelled with its source:
+                       IMD gridded (2010-2025), Open-Meteo archive (dates after the IMD data), or Open-Meteo live
+                       ("live": rolling totals to the last completed hour; updatedAt = fetch time, so BR-06 applies)
   imdWarning/gsiBulletin  no historical feed available: NONE / false (officer can set them in Configuration)
 
 If any table is missing or empty, `load_corridor` returns None and the sample seed is used instead.
@@ -18,9 +20,11 @@ If any table is missing or empty, `load_corridor` returns None and the sample se
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Optional, Union
 
 import psycopg
+
+from . import openmeteo
 
 from .domain.risk_index import susceptibility_category
 from .domain.timeutil import to_iso
@@ -30,6 +34,8 @@ SOURCES = {
     "terrain": "Copernicus DEM 30 m",
     "history": "GSI inventory (RESILION 1)",
 }
+IMD_FIRST, IMD_LAST = date(2010, 1, 7), date(2025, 12, 31)  # 7-day totals need 6 earlier days of IMD data
+NO_RAIN = {"rainfall24h": None, "rainfall3d": None, "rainfall7d": None}
 
 
 def available(conn: psycopg.Connection, schema: str) -> bool:
@@ -55,32 +61,49 @@ def rainfall_totals(conn: psycopg.Connection, schema: str, day: date) -> dict[st
     return {c: {"rainfall24h": tot(s, 1), "rainfall3d": tot(s, 3), "rainfall7d": tot(s, 7)} for c, s in by.items()}
 
 
-def segment_inputs(conn: psycopg.Connection, schema: str, scenario_day: date, now: datetime) -> dict[str, dict]:
+def rainfall_for(conn: psycopg.Connection, schema: str, scenario: Union[date, str], now: datetime) -> tuple[dict, str, str, dict]:
+    """(totals per cell, source label, rainfallDate, updatedAt per cell or {}) for a date or "live"."""
+    if scenario == openmeteo.LIVE:
+        live = openmeteo.read_live(conn, schema)
+        fetched = max((v["fetchedAt"] for v in live.values()), default=None)
+        label = f"Open-Meteo live · fetched {to_iso(fetched)}" if fetched else "Open-Meteo live · not fetched yet"
+        totals = {c: {k: v[k] for k in NO_RAIN} for c, v in live.items()}
+        # No fetch yet -> inputs dated at the epoch so BR-06 shows No data instead of a fake fresh value.
+        updated = {c: to_iso(v["fetchedAt"]) for c, v in live.items()}
+        return totals, label, openmeteo.LIVE, updated
+    day = scenario
+    if IMD_FIRST <= day <= IMD_LAST:
+        return rainfall_totals(conn, schema, day), f"IMD gridded 0.25° · {day.isoformat()}", day.isoformat(), {}
+    return openmeteo.archive_totals(conn, schema, day), f"Open-Meteo archive · {day.isoformat()}", day.isoformat(), {}
+
+
+def segment_inputs(conn: psycopg.Connection, schema: str, scenario: Union[date, str], now: datetime) -> dict[str, dict]:
     """Fresh Risk Index inputs per segment from PostGIS (also used as the input feed on refresh)."""
     feats = {sid: d for sid, d in conn.execute(f"SELECT segment_id, data FROM {schema}.segment_features").fetchall()}
     scores = {sid: (sc, ver) for sid, sc, ver in conn.execute(
         f"SELECT segment_id, susceptibility_score, model_version FROM {schema}.segment_scores").fetchall()}
-    rain = rainfall_totals(conn, schema, scenario_day)
+    rain, label, rain_date, updated = rainfall_for(conn, schema, scenario, now)
+    never = to_iso(datetime(1970, 1, 1, tzinfo=now.tzinfo))
     out = {}
     for sid, f in feats.items():
         sc, ver = scores.get(sid, (None, None))
-        r = rain.get(f.get("rainCellId"), {"rainfall24h": None, "rainfall3d": None, "rainfall7d": None})
+        cell = f.get("rainCellId")
         out[sid] = {
             "susceptibility": susceptibility_category(sc) if sc is not None else None,
             "susceptibilityScore": None if sc is None else round(float(sc), 3),
             "modelVersion": ver,
             "slopeDeg": f.get("slopeP90Deg"),
-            **r,
-            "rainfallDate": scenario_day.isoformat(),
+            **rain.get(cell, NO_RAIN),
+            "rainfallDate": rain_date,
             "pastIncidents": f.get("pastLandslides500m"),
-            "updatedAt": to_iso(now),
+            "updatedAt": (updated.get(cell, never) if scenario == openmeteo.LIVE else to_iso(now)),
             "sample": False,
-            "sources": {**SOURCES, "rainfall": f"IMD gridded 0.25° · {scenario_day.isoformat()}"},
+            "sources": {**SOURCES, "rainfall": label},
         }
     return out
 
 
-def load_corridor(conn: psycopg.Connection, schema: str, scenario_day: date, now: datetime) -> Optional[dict]:
+def load_corridor(conn: psycopg.Connection, schema: str, scenario_day: Union[date, str], now: datetime) -> Optional[dict]:
     if not available(conn, schema):
         return None
     inputs = segment_inputs(conn, schema, scenario_day, now)
@@ -101,7 +124,7 @@ def load_corridor(conn: psycopg.Connection, schema: str, scenario_day: date, now
     model = conn.execute(f"SELECT version, trained_at, meta->'validation'->'results'->(meta->>'model') FROM {schema}.model_runs "
                          "ORDER BY trained_at DESC LIMIT 1").fetchone()
     meta = {
-        "source": "postgis", "scenarioDate": scenario_day.isoformat(), "segments": len(segments), "zones": len(zones),
+        "source": "postgis", "scenarioDate": scenario_day if isinstance(scenario_day, str) else scenario_day.isoformat(), "segments": len(segments), "zones": len(zones),
         "modelVersion": model[0] if model else None,
         "modelCv": {k: model[2].get(k) for k in ("roc_auc_mean", "roc_auc_std", "pr_auc_mean", "pr_auc_std")} if model and model[2] else None,
     }

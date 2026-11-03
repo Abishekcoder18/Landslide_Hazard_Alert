@@ -49,18 +49,29 @@ const ConfigForm: React.FC = () => {
           </div>
           {snap.corridor?.source === 'postgis' && c.scenarioDate && (
             <label className="block">
-              <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-1">IMD rainfall date</span>
-              <span className="flex items-center gap-2">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-1">Rainfall date</span>
+              <span className="flex flex-wrap items-center gap-2">
                 <input
                   type="date"
-                  aria-label="IMD rainfall date"
+                  aria-label="Rainfall date"
                   className={`${inputClass} !w-44`}
                   min="2010-01-07"
-                  max="2025-12-31"
-                  value={c.scenarioDate}
+                  max={new Date().toISOString().slice(0, 10)}
+                  value={c.scenarioDate === 'live' ? '' : c.scenarioDate}
                   onChange={e => e.target.value && set('scenarioDate', e.target.value)}
                 />
-                <Pill tone="grey">IMD gridded 0.25°</Pill>
+                <label className="flex items-center gap-1 text-[13px]">
+                  <input
+                    type="checkbox"
+                    aria-label="Live rainfall"
+                    checked={c.scenarioDate === 'live'}
+                    onChange={e => set('scenarioDate', e.target.checked ? 'live' : '2025-12-31')}
+                  />
+                  Live
+                </label>
+                <Pill tone="grey">
+                  {c.scenarioDate === 'live' ? 'Open-Meteo live' : c.scenarioDate > '2025-12-31' ? 'Open-Meteo archive' : 'IMD gridded 0.25°'}
+                </Pill>
               </span>
             </label>
           )}
@@ -278,7 +289,7 @@ export const ConfigurationPage: React.FC = () => {
           <Card className="overflow-x-auto">
             <CardHeader
               title="Segment inputs"
-              right={snap.segments.some(s => s.inputs.sample) ? <SampleTag /> : <Pill tone="grey">PostGIS · IMD {snap.config.scenarioDate}</Pill>}
+              right={snap.segments.some(s => s.inputs.sample) ? <SampleTag /> : <Pill tone="grey">PostGIS · {snap.segments[0]?.inputs.sources?.rainfall ?? `rainfall ${snap.config.scenarioDate}`}</Pill>}
             />
             <table className="w-full">
               <thead className="bg-[#FAF8F3] border-b border-[#E7E3DA]">
