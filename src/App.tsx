@@ -28,12 +28,12 @@ const Shell: React.FC = () => {
   if (!session) return <LoginPage />;
   const allowed = NAV.filter(n => n.allowed(session.role));
   return (
-    <div className="min-h-screen flex bg-[#FAF8F3] text-[#1F2933] antialiased">
+    <div className="min-h-screen flex bg-app text-ink antialiased">
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <main className="flex-1">
           {!snapshot ? (
-            <div className="p-10 text-center text-[13px] text-[#6B7280]">Loading…</div>
+            <div className="p-10 text-center text-[13px] text-ink-2">Loading…</div>
           ) : (
             <Routes>
               {allowed.map(n => {
@@ -44,7 +44,7 @@ const Shell: React.FC = () => {
             </Routes>
           )}
         </main>
-        <footer className="h-9 px-6 border-t border-[#E7E3DA] bg-white flex items-center justify-between text-[11px] text-[#6B7280]">
+        <footer className="h-9 px-4 lg:px-6 border-t border-line bg-surface flex items-center justify-between text-[11px] text-ink-3">
           <span>RESILION 2.0 · PS13</span>
           <span>Initial corridor · NH-27 within Dima Hasao</span>
         </footer>

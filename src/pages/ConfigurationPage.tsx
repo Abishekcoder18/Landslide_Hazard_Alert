@@ -11,10 +11,10 @@ import { ApproachZone, Config, ImdWarning, Segment, SegmentInputs, Susceptibilit
 
 const NumField: React.FC<{ label: string; value: number; onChange: (v: number) => void; step?: number; unit?: string }> = ({ label, value, onChange, step = 1, unit }) => (
   <label className="block">
-    <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-1">{label}</span>
+    <span className="block text-[11px] font-semibold uppercase tracking-wider text-ink-2 mb-1">{label}</span>
     <span className="flex items-center gap-1.5">
       <input type="number" step={step} className={inputClass} value={Number.isFinite(value) ? value : ''} onChange={e => onChange(Number(e.target.value))} />
-      {unit && <span className="text-xs text-[#6B7280] w-10 shrink-0">{unit}</span>}
+      {unit && <span className="text-xs text-ink-2 w-10 shrink-0">{unit}</span>}
     </span>
   </label>
 );
@@ -49,7 +49,7 @@ const ConfigForm: React.FC = () => {
           </div>
           {snap.corridor?.source === 'postgis' && c.scenarioDate && (
             <label className="block">
-              <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] mb-1">Rainfall date</span>
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-ink-2 mb-1">Rainfall date</span>
               <span className="flex flex-wrap items-center gap-2">
                 <input
                   type="date"
@@ -89,7 +89,7 @@ const ConfigForm: React.FC = () => {
           <NumField label="Escalation after" unit="min" value={c.escalationMinutes} onChange={v => set('escalationMinutes', v)} />
           <NumField label="Approach zone extent" unit="km" step={0.1} value={c.approachZoneExtentKm} onChange={v => set('approachZoneExtentKm', v)} />
           <NumField label="Retention" unit="days" value={c.retentionDays} onChange={v => set('retentionDays', v)} />
-          <label className="col-span-2 flex items-center justify-between rounded-md border border-[#E7E3DA] px-3 h-10 text-[13px]">
+          <label className="col-span-2 flex items-center justify-between rounded-md border border-line px-3 h-10 text-[13px]">
             <span className="font-medium">AI photo check service</span>
             <span className="flex items-center gap-2">
               <Pill tone={c.aiServiceOnline ? 'green' : 'yellow'}>{c.aiServiceOnline ? 'Online' : 'Offline · manual review'}</Pill>
@@ -185,7 +185,7 @@ const InputRow: React.FC<{ seg: Segment }> = ({ seg }) => {
             {SUSC.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           {typeof seg.inputs.susceptibilityScore === 'number' && (
-            <span className="font-mono text-xs text-[#6B7280]" title={seg.inputs.modelVersion}>{seg.inputs.susceptibilityScore.toFixed(2)}</span>
+            <span className="font-mono text-xs text-ink-2" title={seg.inputs.modelVersion}>{seg.inputs.susceptibilityScore.toFixed(2)}</span>
           )}
         </span>
       </Td>
@@ -203,7 +203,7 @@ const InputRow: React.FC<{ seg: Segment }> = ({ seg }) => {
       <Td>
         <span className="inline-flex items-center gap-1.5">
           <RiskBadge level={seg.riskLevel} />
-          <span className="font-mono text-xs text-[#6B7280]">{seg.riskIndex ?? '—'}</span>
+          <span className="font-mono text-xs text-ink-2">{seg.riskIndex ?? '—'}</span>
         </span>
       </Td>
       <Td className="text-right">
@@ -240,10 +240,10 @@ export const ConfigurationPage: React.FC = () => {
         {tab === 'zones' && (
           <Card className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-[#FAF8F3] border-b border-[#E7E3DA]">
+              <thead className="bg-subtle border-b border-line">
                 <tr><Th>Zone</Th><Th>Direction</Th><Th>Segment</Th><Th>Extent km</Th><Th>Nearest point</Th><Th>Fallback points</Th><Th /></tr>
               </thead>
-              <tbody className="divide-y divide-[#E7E3DA]">{snap.zones.map(z => <ZoneRow key={z.id} z={z} />)}</tbody>
+              <tbody className="divide-y divide-line">{snap.zones.map(z => <ZoneRow key={z.id} z={z} />)}</tbody>
             </table>
           </Card>
         )}
@@ -251,17 +251,17 @@ export const ConfigurationPage: React.FC = () => {
         {tab === 'holding' && (
           <Card className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-[#FAF8F3] border-b border-[#E7E3DA]">
+              <thead className="bg-subtle border-b border-line">
                 <tr><Th>Point</Th><Th>Own segment</Th><Th>Capacity</Th><Th>Facilities</Th><Th>Eligibility</Th></tr>
               </thead>
-              <tbody className="divide-y divide-[#E7E3DA]">
+              <tbody className="divide-y divide-line">
                 {snap.holdingPoints.map(h => {
                   const e = checkHoldingPointEligibility(h, segments);
                   return (
                     <tr key={h.id}>
                       <Td>
                         <div className="font-medium">{h.name}</div>
-                        <div className="text-xs text-[#6B7280]">{h.locationName}{h.source ? ` · ${h.source}` : ''}</div>
+                        <div className="text-xs text-ink-2">{h.locationName}{h.source ? ` · ${h.source}` : ''}</div>
                       </Td>
                       <Td>
                         <span className="inline-flex items-center gap-1.5">
@@ -292,10 +292,10 @@ export const ConfigurationPage: React.FC = () => {
               right={snap.segments.some(s => s.inputs.sample) ? <SampleTag /> : <Pill tone="grey">PostGIS · {snap.segments[0]?.inputs.sources?.rainfall ?? `rainfall ${snap.config.scenarioDate}`}</Pill>}
             />
             <table className="w-full">
-              <thead className="bg-[#FAF8F3] border-b border-[#E7E3DA]">
+              <thead className="bg-subtle border-b border-line">
                 <tr><Th>Segment</Th><Th>Susceptibility</Th><Th>Slope °</Th><Th>24h mm</Th><Th>3d mm</Th><Th>7d mm</Th><Th>Incidents</Th><Th>IMD</Th><Th>GSI</Th><Th>Risk</Th><Th /></tr>
               </thead>
-              <tbody className="divide-y divide-[#E7E3DA]">{snap.segments.filter(s => !s.offCorridor).map(s => <InputRow key={s.id} seg={segments[s.id]} />)}</tbody>
+              <tbody className="divide-y divide-line">{snap.segments.filter(s => !s.offCorridor).map(s => <InputRow key={s.id} seg={segments[s.id]} />)}</tbody>
             </table>
           </Card>
         )}

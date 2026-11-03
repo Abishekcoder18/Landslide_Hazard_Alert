@@ -1,34 +1,100 @@
 @import "tailwindcss";
 
+/* Design tokens — the only place colours are defined (owner decision: professional control-room style). */
+@theme static {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  /* Neutrals */
+  --color-app: #F4F6FA;
+  --color-surface: #FFFFFF;
+  --color-subtle: #F8FAFC;
+  --color-line: #E3E8EF;
+  --color-ink: #0F172A;
+  --color-ink-2: #475569;
+  --color-ink-3: #64748B;   /* small label text: #94A3B8 fails AA on white */
+  --color-muted: #94A3B8;   /* icons, placeholders, decoration only */
+
+  /* Sidebar */
+  --color-nav: #0F1E33;
+  --color-nav-text: #C9D4E3;
+  --color-nav-hover: #16294A;
+  --color-nav-active: #1B3352;
+  --color-nav-bar: #4C9AFF;
+  --color-nav-label: #7F93AD;
+
+  /* Primary (brand #3780C8; text on / in blue uses #2F6FB5 for AA contrast) */
+  --color-primary: #3780C8;
+  --color-primary-hover: #2F6FB5;
+  --color-primary-ink: #2F6FB5;
+  --color-primary-press: #285F9C;
+  --color-primary-tint: #EAF2FB;
+  --color-focus: #93C5FD;
+
+  /* Risk: map line / chip bg / chip text */
+  --color-risk-green: #16A34A;   --color-risk-green-bg: #DCFCE7;   --color-risk-green-fg: #166534;   --color-risk-green-line: #BBF7D0;
+  --color-risk-yellow: #CA8A04;  --color-risk-yellow-bg: #FEF9C3;  --color-risk-yellow-fg: #854D0E;  --color-risk-yellow-line: #FDE68A;
+  --color-risk-orange: #EA580C;  --color-risk-orange-bg: #FFEDD5;  --color-risk-orange-fg: #9A3412;  --color-risk-orange-line: #FED7AA;
+  --color-risk-red: #DC2626;     --color-risk-red-bg: #FEE2E2;     --color-risk-red-fg: #991B1B;     --color-risk-red-line: #FECACA;
+  --color-risk-none: #64748B;    --color-risk-none-bg: #F1F5F9;    --color-risk-none-fg: #334155;    --color-risk-none-line: #CBD5E1;
+
+  /* Decisions (solid chips) */
+  --color-dec-go: #15803D;        /* #16A34A with white text is 3.3:1; chip uses green-700 for AA */
+  --color-dec-go-accent: #16A34A;
+  --color-dec-caution-bg: #FEF3C7; --color-dec-caution-fg: #92400E; --color-dec-caution-line: #FCD34D;
+  --color-dec-hold: #C2410C;
+  --color-dec-divert: #2563EB;
+  --color-dec-close: #B91C1C;
+
+  /* Info (blue chips) */
+  --color-info-bg: #EAF2FB; --color-info-fg: #1E4F82; --color-info-line: #C7DDF3;
+
+  --radius-card: 10px;
+  --radius-ctl: 8px;
+  --radius-chip: 6px;
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+  --shadow-pop: 0 12px 32px rgba(16, 24, 40, 0.16), 0 2px 6px rgba(16, 24, 40, 0.08);
+}
+
 @layer base {
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: #FAF8F3;
-    color: #1F2933;
+    font-family: var(--font-sans);
+    background-color: var(--color-app);
+    color: var(--color-ink);
     font-size: 14px;
     line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
   }
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 1px;
+  }
+  .font-mono { font-variant-ligatures: none; }
 }
 
-/* Custom stripe pattern for No data */
-.bg-striped-gray {
-  background-image: repeating-linear-gradient(45deg, #ECECEC, #ECECEC 6px, #E2E8F0 6px, #E2E8F0 12px);
+/* No data: striped chip / list bar (never colour alone — the label is always shown) */
+.bg-striped-none {
+  background-image: repeating-linear-gradient(45deg, var(--color-risk-none-bg), var(--color-risk-none-bg) 4px, #E2E8F0 4px, #E2E8F0 8px);
 }
 
-/* Leaflet Map Custom Styling */
+/* Leaflet */
 .leaflet-container {
-  font-family: 'Inter', sans-serif !important;
-  z-index: 10;
-  background-color: #FAF8F3 !important;
+  font-family: var(--font-sans) !important;
+  background-color: var(--color-subtle) !important;
 }
+.leaflet-control-zoom a { color: var(--color-ink) !important; }
+.leaflet-control-zoom { border: 1px solid var(--color-line) !important; border-radius: 8px !important; overflow: hidden; box-shadow: var(--shadow-card) !important; }
 
 .resilion-map-tooltip {
-  background: #FFFFFF !important;
-  border: 1px solid #E7E3DA !important;
+  background: var(--color-surface) !important;
+  border: 1px solid var(--color-line) !important;
   border-radius: 8px !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+  box-shadow: var(--shadow-card) !important;
   padding: 6px 10px !important;
-  color: #1F2933 !important;
+  color: var(--color-ink) !important;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .custom-segment-pin, .custom-hp-pin {
@@ -36,11 +102,5 @@
   border: none !important;
 }
 
-/* Custom Scrollbar utilities */
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-none {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }

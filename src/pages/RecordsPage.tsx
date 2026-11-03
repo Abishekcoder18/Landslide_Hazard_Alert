@@ -60,7 +60,7 @@ export const RecordsPage: React.FC = () => {
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead className="bg-[#FAF8F3] border-b border-[#E7E3DA]">
+                    <thead className="bg-subtle border-b border-line">
                       <tr>
                         <Th>Time</Th>
                         <Th>Zone</Th>
@@ -72,12 +72,12 @@ export const RecordsPage: React.FC = () => {
                         <Th>Trigger</Th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#E7E3DA]">
+                    <tbody className="divide-y divide-line">
                       {decisions.map(d => (
                         <tr key={d.id}>
                           <Td className="whitespace-nowrap">
                             <div>{fmtDateTime(d.at)}</div>
-                            <div className="text-[11px] font-mono text-[#6B7280]">{d.id}</div>
+                            <div className="text-[11px] font-mono text-ink-2">{d.id}</div>
                           </Td>
                           <Td className="font-mono">{d.zoneId}</Td>
                           <Td>
@@ -93,13 +93,13 @@ export const RecordsPage: React.FC = () => {
                             <div className="flex gap-1 flex-wrap items-center">
                               <RoadStateBadge state={d.inputs.roadState} />
                               <RiskBadge level={d.inputs.riskLevel} />
-                              <span className="text-xs font-mono text-[#6B7280]">{d.inputs.riskIndex ?? '—'}</span>
+                              <span className="text-xs font-mono text-ink-2">{d.inputs.riskIndex ?? '—'}</span>
                               {d.inputs.imdWarning !== 'NONE' && <Pill tone="grey">IMD {d.inputs.imdWarning}</Pill>}
                             </div>
                           </Td>
                           <Td>{d.holdingPointId ? holdingPoints[d.holdingPointId]?.shortName : d.diversion ?? '—'}</Td>
                           <Td className="font-mono whitespace-nowrap">{d.expectedWaitMinutes !== undefined ? `${fmtWait(d.expectedWaitMinutes)} est.` : '—'}</Td>
-                          <Td className="text-xs text-[#6B7280]">{d.trigger}</Td>
+                          <Td className="text-xs text-ink-2">{d.trigger}</Td>
                         </tr>
                       ))}
                     </tbody>
@@ -118,7 +118,7 @@ export const RecordsPage: React.FC = () => {
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-[#FAF8F3] border-b border-[#E7E3DA]">
+                  <thead className="bg-subtle border-b border-line">
                     <tr>
                       <Th>Time</Th>
                       <Th>Actor</Th>
@@ -127,20 +127,20 @@ export const RecordsPage: React.FC = () => {
                       <Th>Before → after</Th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#E7E3DA]">
+                  <tbody className="divide-y divide-line">
                     {audit.map(a => (
                       <tr key={a.id}>
                         <Td className="whitespace-nowrap">
                           <div>{fmtDateTime(a.at)}</div>
-                          <div className="text-[11px] font-mono text-[#6B7280]">{a.id}</div>
+                          <div className="text-[11px] font-mono text-ink-2">{a.id}</div>
                         </Td>
                         <Td>
                           <div>{a.actor}</div>
-                          <div className="text-[11px] text-[#6B7280]">{a.role === 'system' ? 'System' : ROLE_LABEL[a.role]}</div>
+                          <div className="text-[11px] text-ink-2">{a.role === 'system' ? 'System' : ROLE_LABEL[a.role]}</div>
                         </Td>
                         <Td className="font-medium whitespace-nowrap">{a.action}</Td>
                         <Td className="text-xs max-w-md break-words">{a.details}</Td>
-                        <Td className="text-xs font-mono text-[#6B7280] max-w-[220px] break-words">{a.before || a.after ? `${(a.before ?? '').slice(0, 60)} → ${(a.after ?? '').slice(0, 60)}` : '—'}</Td>
+                        <Td className="text-xs font-mono text-ink-2 max-w-[220px] break-words">{a.before || a.after ? `${(a.before ?? '').slice(0, 60)} → ${(a.after ?? '').slice(0, 60)}` : '—'}</Td>
                       </tr>
                     ))}
                   </tbody>

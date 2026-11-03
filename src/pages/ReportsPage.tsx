@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Check, X, Upload, Crosshair, CheckCircle2, XCircle } from 'lucide-react';
 import { TopBar } from '../components/TopBar';
 import { AiTag, ReportStatusBadge, RouteBadge, Pill } from '../components/Badges';
-import { Button, Card, CardHeader, Empty, Label, PageBody, Tabs, Td, Th, inputClass } from '../components/ui';
+import { Button, Card, CardHeader, Empty, Label, PageBody, Tabs, Td, Th, Thumb, inputClass } from '../components/ui';
 import { useApp } from '../state/AppContext';
 import { useCorridor } from '../state/selectors';
 import { api, PhotoInput } from '../api';
@@ -24,7 +24,7 @@ type ReviewTab = 'queue' | 'manual' | 'flagged' | 'logged' | 'decided' | 'new';
 type ReporterTab = 'new' | 'mine';
 
 const Check2: React.FC<{ ok: boolean; children: React.ReactNode }> = ({ ok, children }) => (
-  <span className={`inline-flex items-center gap-1 text-xs ${ok ? 'text-[#2F6B45]' : 'text-[#9B2C2C]'}`}>
+  <span className={`inline-flex items-center gap-1 text-xs ${ok ? 'text-risk-green-fg' : 'text-risk-red-fg'}`}>
     {ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
     {children}
   </span>
@@ -37,7 +37,7 @@ const AiCell: React.FC<{ r: Report }> = ({ r }) =>
         <AiTag />
         <span className="font-medium">{HAZARD_LABEL[r.ai.hazardClass]}</span>
       </div>
-      <div className="text-xs text-[#6B7280] font-mono">
+      <div className="text-xs text-ink-2 font-mono">
         {r.ai.blockedShare}% blocked · {(r.ai.confidence * 100).toFixed(0)}%
       </div>
       {r.ai.simulated ? (
@@ -56,8 +56,8 @@ const ChecksCell: React.FC<{ r: Report }> = ({ r }) => (
       Corridor{r.checks.distanceToCorridorKm !== null ? ` · ${r.checks.distanceToCorridorKm} km` : ''}
     </Check2>
     <Check2 ok={r.checks.recent}>Age {r.checks.ageMinutes} min</Check2>
-    {r.checks.duplicateOf && <span className="text-xs text-[#2A649C]">Group of {r.checks.duplicateOf}</span>}
-    <span className="text-xs text-[#6B7280]">Reporter · {r.checks.reporterReportCount} prior</span>
+    {r.checks.duplicateOf && <span className="text-xs text-primary-ink">Group of {r.checks.duplicateOf}</span>}
+    <span className="text-xs text-ink-2">Reporter · {r.checks.reporterReportCount} prior</span>
   </div>
 );
 
@@ -68,7 +68,7 @@ const ReportsTable: React.FC<{ reports: Report[]; actions?: boolean }> = ({ repo
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
-        <thead className="bg-[#FAF8F3] border-b border-[#E7E3DA]">
+        <thead className="bg-subtle border-b border-line">
           <tr>
             <Th>Report</Th>
             <Th>Location</Th>
@@ -79,25 +79,25 @@ const ReportsTable: React.FC<{ reports: Report[]; actions?: boolean }> = ({ repo
             {actions && <Th className="text-right">Officer</Th>}
           </tr>
         </thead>
-        <tbody className="divide-y divide-[#E7E3DA]">
+        <tbody className="divide-y divide-line">
           {reports.map(r => {
             const open = r.status === 'unverified' || r.status === 'corroborated';
             const target = stateFor[r.id] ?? (r.ai && r.ai.blockedShare < 50 ? 'RESTRICTED_ONE_WAY' : 'BLOCKED');
             return (
-              <tr key={r.id} className="hover:bg-[#FAF8F3]/60">
+              <tr key={r.id} className="hover:bg-subtle/60">
                 <Td>
                   <div className="font-mono font-medium">{r.id}</div>
-                  <div className="text-xs text-[#6B7280]">{fmtTime(r.createdAt)} · {fmtAgo(r.createdAt, now)}</div>
-                  <div className="text-xs text-[#6B7280]">{r.reporterName}</div>
+                  <div className="text-xs text-ink-2">{fmtTime(r.createdAt)} · {fmtAgo(r.createdAt, now)}</div>
+                  <div className="text-xs text-ink-2">{r.reporterName}</div>
                 </Td>
                 <Td className="max-w-[220px]">
                   <div className="font-mono text-xs font-semibold">{r.segmentId}</div>
                   <div>{r.locationText}</div>
-                  {r.note && <div className="text-xs text-[#6B7280] mt-1 break-words">“{r.note}”</div>}
+                  {r.note && <div className="text-xs text-ink-2 mt-1 break-words">“{r.note}”</div>}
                 </Td>
                 <Td>
                   {r.photoUrl ? (
-                    <img src={r.photoUrl} alt={`Report ${r.id}`} className="w-20 h-14 object-cover rounded border border-[#E7E3DA] bg-[#FAF8F3]" />
+                    <Thumb src={r.photoUrl} alt={`Report ${r.id}`} className="w-20 h-14 object-cover rounded border border-line bg-subtle" />
                   ) : (
                     '—'
                   )}
@@ -108,7 +108,7 @@ const ReportsTable: React.FC<{ reports: Report[]; actions?: boolean }> = ({ repo
                   <div className="flex flex-col gap-1 items-start">
                     <ReportStatusBadge status={r.status} />
                     <RouteBadge route={r.route} />
-                    {r.decidedBy && <span className="text-[11px] text-[#6B7280]">{r.decidedBy} · {fmtTime(r.decidedAt)}</span>}
+                    {r.decidedBy && <span className="text-[11px] text-ink-2">{r.decidedBy} · {fmtTime(r.decidedAt)}</span>}
                   </div>
                 </Td>
                 {actions && (
@@ -117,7 +117,7 @@ const ReportsTable: React.FC<{ reports: Report[]; actions?: boolean }> = ({ repo
                       <div className="flex flex-col items-end gap-1.5">
                         <select
                           aria-label="New road state"
-                          className="h-7 px-1.5 rounded-md border border-[#E7E3DA] text-xs bg-white"
+                          className="h-7 px-1.5 rounded-md border border-line text-xs bg-surface"
                           value={target}
                           onChange={e => setStateFor(s => ({ ...s, [r.id]: e.target.value as typeof target }))}
                         >
@@ -135,7 +135,7 @@ const ReportsTable: React.FC<{ reports: Report[]; actions?: boolean }> = ({ repo
                         </div>
                       </div>
                     ) : (
-                      <span className="text-xs text-[#6B7280]">—</span>
+                      <span className="text-xs text-ink-2">—</span>
                     )}
                   </Td>
                 )}
@@ -220,16 +220,16 @@ const NewReportForm: React.FC = () => {
                     setPhoto({ kind: 'sample', sampleId: p.id });
                     setPreview(p.url);
                   }}
-                  className={`rounded-md border overflow-hidden text-left ${photo?.kind === 'sample' && photo.sampleId === p.id ? 'border-[#3780C8] ring-2 ring-[#3780C8]/20' : 'border-[#E7E3DA]'}`}
+                  className={`rounded-md border overflow-hidden text-left ${photo?.kind === 'sample' && photo.sampleId === p.id ? 'border-primary ring-2 ring-primary/20' : 'border-line'}`}
                 >
-                  <img src={p.url} alt={p.label} className="w-full h-20 object-cover bg-[#FAF8F3]" />
+                  <Thumb src={p.url} alt={p.label} className="w-full h-20 object-cover bg-subtle" />
                   <div className="px-2 py-1 text-xs flex items-center justify-between">
                     <span>{p.label}</span>
                     <Pill tone="grey" className="!text-[10px] !px-1">Sample</Pill>
                   </div>
                 </button>
               ))}
-              <label className={`rounded-md border border-dashed flex flex-col items-center justify-center h-[108px] cursor-pointer text-xs text-[#6B7280] hover:bg-[#FAF8F3] ${photo?.kind === 'upload' ? 'border-[#3780C8] text-[#3780C8]' : 'border-[#E7E3DA]'}`}>
+              <label className={`rounded-md border border-dashed flex flex-col items-center justify-center h-[108px] cursor-pointer text-xs text-ink-2 hover:bg-subtle ${photo?.kind === 'upload' ? 'border-primary text-primary-ink' : 'border-line'}`}>
                 <Upload className="w-4 h-4 mb-1" />
                 {photo?.kind === 'upload' ? photo.fileName : 'Upload photo'}
                 <input type="file" accept="image/*" className="hidden" onChange={e => onFile(e.target.files?.[0])} />
@@ -280,7 +280,7 @@ const NewReportForm: React.FC = () => {
         <CardHeader title={last ? last.id : 'Result'} right={last ? <ReportStatusBadge status={last.status} /> : undefined} />
         {last ? (
           <div className="p-4 space-y-3 text-[13px]">
-            {preview && <img src={preview} alt="Submitted" className="w-full h-40 object-cover rounded-md border border-[#E7E3DA]" />}
+            {preview && <img src={preview} alt="Submitted" className="w-full h-40 object-cover rounded-md border border-line" />}
             <AiCell r={last} />
             <ChecksCell r={last} />
             <RouteBadge route={last.route} />

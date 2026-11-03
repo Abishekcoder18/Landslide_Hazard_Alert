@@ -175,6 +175,18 @@ Delegated by the owner (Abishek) and implemented as stated; BR-01..BR-12 are unc
    time are never sent to a model (BR-10); the officer still sees them. PRD change: FR-21 / §9 "photo plus report
    metadata" → photo only. Reason: on the local model a hostile note in a delimited metadata block flipped 13 of 20
    hazard photos to "clear"; without it, 0 of 20 (`docs/PHOTO_EVAL.md`). Tests: `test_ai.py`, `test_ai_local.py`.
+7. **UI style: professional control-room look (2026-11-03)**; replaces the earlier milk-white flat style. Primary brand
+   blue `#3780C8` kept. Rules that stay: no gradients, no emoji, no word "demo", no explanatory paragraphs (labels,
+   numbers, chips only), risk never shown by colour alone, WCAG AA contrast. Visual only: no change to `src/domain`,
+   `src/api`, backend logic or data. All colours are tokens in `src/index.css` (`@theme static`); the map reads them
+   through `src/lib/tokens.ts`. Three token adjustments for AA (text contrast measured against the token background):
+   - text on / in blue (primary buttons, active tabs, links) uses `#2F6FB5` (5.2:1); white on `#3780C8` is 4.1:1, so
+     `#3780C8` is used for the logo, active bars, focus, selected tint and the map only;
+   - GO chip `#15803D` (5.0:1) instead of `#16A34A` (3.3:1 with white text); `#16A34A` stays for map lines and accents;
+   - small label text `#64748B` (4.8:1); muted `#94A3B8` (2.6:1) only for icons and placeholders.
+   Also fixed: map controls showed above the segment drawer (map is now its own stacking context; drawer z-1200, toasts
+   z-1300); map controls moved from floating over the map into the card header. Screenshots at 1440×900, real corridor,
+   15 May 2022: `docs/evidence/50-login.png` … `60-configuration.png` (`backend/scripts/ui_screenshots.py`).
 
 ## Real-data strengthening, phase status (2026-11-03)
 

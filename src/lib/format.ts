@@ -42,3 +42,10 @@ export const fromLocalInput = (v: string) => (v ? new Date(v).toISOString() : nu
 
 /** AI provider shown to users: the free local model ("local:<model>") is never presented as Claude. */
 export const providerLabel = (model?: string) => (model?.startsWith('local:') ? 'Local model' : model?.startsWith('claude') ? 'Claude' : 'Language model');
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "2022-05-15" -> "15 May 2022" (calendar date, no time-zone shift). */
+export const fmtDay = (d: string) => {
+  const [y, m, day] = d.split('-').map(Number);
+  return y && m && day ? `${day} ${MONTHS[m - 1]} ${y}` : d;
+};

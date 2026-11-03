@@ -2,25 +2,44 @@ import React from 'react';
 import { ApprovalStatus, DecisionType, IncidentState, ReportRoute, ReportStatus, RiskLevel, RoadState } from '../types';
 import { cx } from './ui';
 
+/** Tinted chips (status / info). Risk chips use the risk tokens; decisions are solid; road state is outline. */
 const TONE = {
-  green: 'border-[#BDE3C9] bg-[#DFF1E5] text-[#2F6B45]',
-  yellow: 'border-[#F3E29F] bg-[#FBF1CC] text-[#7A5B00]',
-  orange: 'border-[#F6C6A7] bg-[#FCE3D2] text-[#9A4A16]',
-  red: 'border-[#EEAFAF] bg-[#F8D7D7] text-[#9B2C2C]',
-  blue: 'border-[#CDE1F4] bg-[#EBF2FA] text-[#2A649C]',
-  grey: 'border-[#E7E3DA] bg-[#F3F1EC] text-[#4B5563]'
+  green: 'border-risk-green-line bg-risk-green-bg text-risk-green-fg',
+  yellow: 'border-risk-yellow-line bg-risk-yellow-bg text-risk-yellow-fg',
+  orange: 'border-risk-orange-line bg-risk-orange-bg text-risk-orange-fg',
+  red: 'border-risk-red-line bg-risk-red-bg text-risk-red-fg',
+  blue: 'border-info-line bg-info-bg text-info-fg',
+  grey: 'border-risk-none-line bg-risk-none-bg text-risk-none-fg'
 } as const;
 type Tone = keyof typeof TONE;
 
+const CHIP = 'inline-flex items-center gap-1 rounded-chip border px-2 h-[22px] text-[12px] font-medium whitespace-nowrap leading-none';
+
 export const Pill: React.FC<{ tone: Tone; children: React.ReactNode; className?: string; title?: string }> = ({ tone, children, className, title }) => (
-  <span title={title} className={cx('inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium whitespace-nowrap', TONE[tone], className)}>
+  <span title={title} className={cx(CHIP, TONE[tone], className)}>
     {children}
   </span>
 );
 
 export const AiTag: React.FC = () => <Pill tone="blue" className="!px-1.5 !text-[11px] font-semibold">AI</Pill>;
-export const EstTag: React.FC<{ className?: string }> = ({ className }) => <Pill tone="yellow" className={cx('!px-1.5 !text-[11px]', className)}>estimate</Pill>;
+export const EstTag: React.FC<{ className?: string }> = ({ className }) => <Pill tone="yellow" className={cx('!px-1.5 !h-5 !text-[11px]', className)}>estimate</Pill>;
 export const SampleTag: React.FC = () => <Pill tone="grey" className="!text-[11px]">Sample data</Pill>;
+
+export const RISK_LINE: Record<RiskLevel, string> = {
+  GREEN: 'var(--color-risk-green)',
+  YELLOW: 'var(--color-risk-yellow)',
+  ORANGE: 'var(--color-risk-orange)',
+  RED: 'var(--color-risk-red)',
+  NO_DATA: 'var(--color-risk-none)'
+};
+/** Tailwind bg class for a risk colour bar. */
+export const RISK_BAR: Record<RiskLevel, string> = {
+  GREEN: 'bg-risk-green',
+  YELLOW: 'bg-risk-yellow',
+  ORANGE: 'bg-risk-orange',
+  RED: 'bg-risk-red',
+  NO_DATA: 'bg-striped-none'
+};
 
 const RISK: Record<RiskLevel, { tone: Tone; label: string }> = {
   GREEN: { tone: 'green', label: 'Green' },
@@ -31,29 +50,42 @@ const RISK: Record<RiskLevel, { tone: Tone; label: string }> = {
 };
 /** NFR-07: never colour alone — always text. */
 export const RiskBadge: React.FC<{ level: RiskLevel }> = ({ level }) => (
-  <Pill tone={RISK[level].tone} className={level === 'NO_DATA' ? 'bg-striped-gray' : undefined}>{RISK[level].label}</Pill>
+  <Pill tone={RISK[level].tone} className={cx('font-semibold', level === 'NO_DATA' && 'bg-striped-none')}>
+    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: RISK_LINE[level] }} aria-hidden />
+    {RISK[level].label}
+  </Pill>
 );
 
-const STATE: Record<RoadState, { tone: Tone; label: string }> = {
-  OPEN: { tone: 'green', label: 'Open' },
-  RESTRICTED_HEAVY: { tone: 'yellow', label: 'Restricted · heavy' },
-  RESTRICTED_ONE_WAY: { tone: 'blue', label: 'Restricted · one-way' },
-  BLOCKED: { tone: 'red', label: 'Blocked' },
-  UNKNOWN: { tone: 'grey', label: 'Unknown' }
+/** Road state: outline chips so they never read as risk chips. */
+const STATE: Record<RoadState, { cls: string; label: string }> = {
+  OPEN: { cls: 'border-risk-green/60 text-risk-green-fg', label: 'Open' },
+  RESTRICTED_HEAVY: { cls: 'border-risk-yellow/70 text-risk-yellow-fg', label: 'Restricted · heavy' },
+  RESTRICTED_ONE_WAY: { cls: 'border-dec-divert/50 text-info-fg', label: 'Restricted · one-way' },
+  BLOCKED: { cls: 'border-risk-red/70 text-risk-red-fg', label: 'Blocked' },
+  UNKNOWN: { cls: 'border-risk-none/50 text-risk-none-fg', label: 'Unknown' }
 };
-export const RoadStateBadge: React.FC<{ state: RoadState }> = ({ state }) => <Pill tone={STATE[state].tone}>{STATE[state].label}</Pill>;
+export const RoadStateBadge: React.FC<{ state: RoadState }> = ({ state }) => (
+  <span className={cx(CHIP, 'bg-surface', STATE[state].cls)}>{STATE[state].label}</span>
+);
 
-const DECISION: Record<DecisionType | 'CLOSE', { tone: Tone; label: string }> = {
-  GO: { tone: 'green', label: 'GO' },
-  GO_CAUTION: { tone: 'yellow', label: 'GO · caution' },
-  HOLD: { tone: 'orange', label: 'HOLD' },
-  DIVERT: { tone: 'blue', label: 'DIVERT' },
-  CLOSE: { tone: 'red', label: 'CLOSE' }
+export const DECISION_BAR: Record<DecisionType | 'CLOSE', string> = {
+  GO: 'bg-dec-go-accent',
+  GO_CAUTION: 'bg-dec-caution-line',
+  HOLD: 'bg-dec-hold',
+  DIVERT: 'bg-dec-divert',
+  CLOSE: 'bg-dec-close'
+};
+const DECISION: Record<DecisionType | 'CLOSE', { cls: string; label: string }> = {
+  GO: { cls: 'bg-dec-go border-dec-go text-white', label: 'GO' },
+  GO_CAUTION: { cls: 'bg-dec-caution-bg border-dec-caution-line text-dec-caution-fg', label: 'GO · caution' },
+  HOLD: { cls: 'bg-dec-hold border-dec-hold text-white', label: 'HOLD' },
+  DIVERT: { cls: 'bg-dec-divert border-dec-divert text-white', label: 'DIVERT' },
+  CLOSE: { cls: 'bg-dec-close border-dec-close text-white', label: 'CLOSE' }
 };
 export const DecisionChip: React.FC<{ decision: DecisionType | 'CLOSE'; size?: 'sm' | 'lg' }> = ({ decision, size = 'sm' }) => (
-  <Pill tone={DECISION[decision].tone} className={size === 'lg' ? '!text-sm !px-3 !py-1 font-bold tracking-wide' : 'font-semibold'}>
+  <span className={cx(CHIP, 'font-semibold tracking-[.02em]', size === 'lg' && '!h-7 !px-3 !text-[13px] font-bold', DECISION[decision].cls)}>
     {DECISION[decision].label}
-  </Pill>
+  </span>
 );
 
 const REPORT_STATUS: Record<ReportStatus, { tone: Tone; label: string }> = {

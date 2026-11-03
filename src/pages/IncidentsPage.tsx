@@ -18,12 +18,12 @@ const Timeline: React.FC<{ state: Incident['state'] }> = ({ state }) => {
         <li
           key={s.key}
           className={cx(
-            'h-12 rounded-md border px-2 flex flex-col justify-center text-xs',
-            i === idx ? 'border-[#3780C8] bg-[#3780C8]/10 text-[#3780C8] font-semibold' : i < idx ? 'border-[#BDE3C9] bg-[#DFF1E5] text-[#2F6B45]' : 'border-[#E7E3DA] bg-[#FAF8F3] text-[#6B7280]'
+            'min-h-12 py-1.5 rounded-ctl border px-2 flex flex-col justify-center text-xs',
+            i === idx ? 'border-primary bg-primary-tint text-primary-ink font-semibold' : i < idx ? 'border-risk-green-line bg-risk-green-bg text-risk-green-fg' : 'border-line bg-subtle text-ink-2'
           )}
         >
           <span className="font-mono text-[10px]">{i + 1}</span>
-          <span className="truncate">{s.label}</span>
+          <span className="leading-tight">{s.label}</span>
         </li>
       ))}
     </ol>
@@ -51,7 +51,7 @@ const IncidentDetail: React.FC<{ inc: Incident }> = ({ inc }) => {
         <span className="font-medium">{seg.id} {seg.name}</span>
         <RoadStateBadge state={seg.roadState} />
         {inc.closureType && <Pill tone="red">Closure · {inc.closureType.replace('_', ' ').toLowerCase()}</Pill>}
-        <span className="text-xs text-[#6B7280]">Opened {fmtDateTime(inc.openedAt)}</span>
+        <span className="text-xs text-ink-2">Opened {fmtDateTime(inc.openedAt)}</span>
       </div>
 
       <Timeline state={inc.state} />
@@ -72,8 +72,8 @@ const IncidentDetail: React.FC<{ inc: Incident }> = ({ inc }) => {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-lg border border-[#E7E3DA] p-3 space-y-2.5">
-          <div className="flex items-center gap-2 text-[13px] font-semibold"><Clock className="w-4 h-4 text-[#6B7280]" /> Reopening</div>
+        <div className="rounded-card border border-line p-3 space-y-2.5">
+          <div className="flex items-center gap-2 text-[13px] font-semibold"><Clock className="w-4 h-4 text-ink-2" /> Reopening</div>
           <div className="flex items-center gap-2 text-[13px]">
             <span className="text-lg font-semibold tabular-nums">{inc.reopeningEstimate ? fmtClock(inc.reopeningEstimate) : '—'}</span>
             {inc.reopeningEstimate && <EstTag />}
@@ -85,12 +85,12 @@ const IncidentDetail: React.FC<{ inc: Incident }> = ({ inc }) => {
               {inc.reopeningEstimate && <Button onClick={() => act(s => api.updateIncident(s, inc.id, { reopeningEstimate: null }))}>Clear</Button>}
             </div>
           )}
-          <div className="divide-y divide-[#E7E3DA] border-t border-[#E7E3DA]">
+          <div className="divide-y divide-line border-t border-line">
             {zones.map(z => {
               const r = decisionByZone[z.id].result;
               return (
                 <div key={z.id} className="flex items-center justify-between py-1.5 text-[13px]">
-                  <span><span className="font-mono">{z.id}</span> <span className="text-[#6B7280]">{z.direction}</span></span>
+                  <span><span className="font-mono">{z.id}</span> <span className="text-ink-2">{z.direction}</span></span>
                   <span className="flex items-center gap-1.5">
                     <DecisionChip decision={r.decision} />
                     {r.expectedWaitMinutes !== undefined && (
@@ -106,16 +106,16 @@ const IncidentDetail: React.FC<{ inc: Incident }> = ({ inc }) => {
           </div>
         </div>
 
-        <div className="rounded-lg border border-[#E7E3DA] p-3 space-y-2.5">
-          <div className="flex items-center gap-2 text-[13px] font-semibold"><HardHat className="w-4 h-4 text-[#6B7280]" /> Crew</div>
+        <div className="rounded-card border border-line p-3 space-y-2.5">
+          <div className="flex items-center gap-2 text-[13px] font-semibold"><HardHat className="w-4 h-4 text-ink-2" /> Crew</div>
           {inc.crew ? (
             <div className="text-[13px] space-y-0.5">
               <div className="font-medium">{inc.crew.unitName}</div>
-              <div className="text-[#6B7280]">{inc.crew.leader} · {inc.crew.contact}</div>
-              <div className="text-xs text-[#6B7280]">Dispatched {fmtTime(inc.crew.dispatchedAt)}</div>
+              <div className="text-ink-2">{inc.crew.leader} · {inc.crew.contact}</div>
+              <div className="text-xs text-ink-2">Dispatched {fmtTime(inc.crew.dispatchedAt)}</div>
             </div>
           ) : (
-            <div className="text-[13px] text-[#6B7280]">Not assigned</div>
+            <div className="text-[13px] text-ink-2">Not assigned</div>
           )}
           {edit && inc.state !== 'reopened_full' && (
             <form
@@ -136,16 +136,16 @@ const IncidentDetail: React.FC<{ inc: Incident }> = ({ inc }) => {
         </div>
       </div>
 
-      <div className="rounded-lg border border-[#E7E3DA] p-3 space-y-2">
+      <div className="rounded-card border border-line p-3 space-y-2">
         <Label>Equipment</Label>
         <div className="flex flex-wrap gap-1.5">
-          {inc.equipment.length === 0 && <span className="text-[13px] text-[#6B7280]">None</span>}
+          {inc.equipment.length === 0 && <span className="text-[13px] text-ink-2">None</span>}
           {inc.equipment.map(eq => (
-            <span key={eq} className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[#E7E3DA] bg-[#FAF8F3] text-xs">
+            <span key={eq} className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-line bg-subtle text-xs">
               {eq}
               {edit && (
                 <button aria-label={`Remove ${eq}`} onClick={() => act(s => api.updateIncident(s, inc.id, { equipment: inc.equipment.filter(x => x !== eq) }))}>
-                  <X className="w-3 h-3 text-[#6B7280]" />
+                  <X className="w-3 h-3 text-ink-2" />
                 </button>
               )}
             </span>
@@ -169,8 +169,8 @@ const IncidentDetail: React.FC<{ inc: Incident }> = ({ inc }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <Label>Reports</Label>
-          <div className="rounded-lg border border-[#E7E3DA] divide-y divide-[#E7E3DA]">
-            {reports.length === 0 && <div className="px-3 py-2 text-[13px] text-[#6B7280]">None</div>}
+          <div className="rounded-card border border-line divide-y divide-line">
+            {reports.length === 0 && <div className="px-3 py-2 text-[13px] text-ink-2">None</div>}
             {reports.map(r => (
               <div key={r.id} className="px-3 py-2 flex items-center justify-between text-[13px]">
                 <span className="font-mono">{r.id}</span>
@@ -181,11 +181,11 @@ const IncidentDetail: React.FC<{ inc: Incident }> = ({ inc }) => {
         </div>
         <div>
           <Label>Log</Label>
-          <ol className="rounded-lg border border-[#E7E3DA] divide-y divide-[#E7E3DA] max-h-60 overflow-y-auto">
+          <ol className="rounded-card border border-line divide-y divide-line max-h-60 overflow-y-auto">
             {[...inc.log].reverse().map((l, i) => (
               <li key={i} className="px-3 py-2 text-[13px]">
                 <div>{l.text}</div>
-                <div className="text-[11px] text-[#6B7280]">{fmtTime(l.at)} · {l.by}</div>
+                <div className="text-[11px] text-ink-2">{fmtTime(l.at)} · {l.by}</div>
               </li>
             ))}
           </ol>
@@ -209,15 +209,15 @@ export const IncidentsPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           <Card className="lg:col-span-4 overflow-hidden">
             <CardHeader title={`Incidents · ${openCount} open`} />
-            <div className="divide-y divide-[#E7E3DA]">
+            <div className="divide-y divide-line">
               {sorted.length === 0 && <Empty>No incidents</Empty>}
               {sorted.map(i => (
-                <button key={i.id} onClick={() => setSelectedId(i.id)} className={cx('w-full text-left px-4 py-2.5', selected?.id === i.id ? 'bg-[#3780C8]/10' : 'hover:bg-[#FAF8F3]')}>
+                <button key={i.id} onClick={() => setSelectedId(i.id)} className={cx('w-full text-left px-4 py-2.5', selected?.id === i.id ? 'bg-primary-tint' : 'hover:bg-subtle')}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-[13px] font-medium">{i.id}</span>
                     <IncidentBadge state={i.state} />
                   </div>
-                  <div className="text-xs text-[#6B7280] mt-0.5">{i.segmentId} · {fmtDateTime(i.openedAt)}</div>
+                  <div className="text-xs text-ink-2 mt-0.5">{i.segmentId} · {fmtDateTime(i.openedAt)}</div>
                 </button>
               ))}
             </div>

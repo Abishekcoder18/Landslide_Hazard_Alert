@@ -10,24 +10,24 @@ export const ToastContainer: React.FC = () => {
   return (
     <div className="fixed bottom-12 right-4 z-[1300] flex flex-col-reverse gap-2 max-w-sm w-full pointer-events-none">
       {toasts.map(toast => {
-        let bgClass = 'bg-white border-[#E7E3DA] text-[#1F2933]';
-        let icon = <Info className="w-4 h-4 text-[#3780C8] shrink-0" />;
+        let bgClass = 'bg-surface border-line text-ink';
+        let icon = <Info className="w-4 h-4 text-primary-ink shrink-0" />;
 
         if (toast.type === 'success') {
-          bgClass = 'bg-[#DFF1E5] border-[#BDE3C9] text-[#2F6B45]';
-          icon = <CheckCircle2 className="w-4 h-4 text-[#2F6B45] shrink-0" />;
+          bgClass = 'bg-risk-green-bg border-risk-green-line text-risk-green-fg';
+          icon = <CheckCircle2 className="w-4 h-4 text-risk-green-fg shrink-0" />;
         } else if (toast.type === 'warning') {
-          bgClass = 'bg-[#FBF1CC] border-[#F3E29F] text-[#7A5B00]';
-          icon = <AlertTriangle className="w-4 h-4 text-[#7A5B00] shrink-0" />;
+          bgClass = 'bg-dec-caution-bg border-dec-caution-line text-dec-caution-fg';
+          icon = <AlertTriangle className="w-4 h-4 text-dec-caution-fg shrink-0" />;
         } else if (toast.type === 'error') {
-          bgClass = 'bg-[#F8D7D7] border-[#EEAFAF] text-[#9B2C2C]';
-          icon = <AlertOctagon className="w-4 h-4 text-[#9B2C2C] shrink-0" />;
+          bgClass = 'bg-risk-red-bg border-risk-red-line text-risk-red-fg';
+          icon = <AlertOctagon className="w-4 h-4 text-risk-red-fg shrink-0" />;
         }
 
         return (
           <div
             key={toast.id}
-            className={`pointer-events-auto p-3 rounded-lg border shadow-md flex items-start justify-between gap-2.5 text-xs transition-all ${bgClass}`}
+            className={`pointer-events-auto p-3 rounded-card border shadow-pop flex items-start justify-between gap-2.5 text-[13px] transition-all ${bgClass}`}
             role="status"
           >
             <div className="flex items-start gap-2">

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronRight, MapPin, Route, Clock, ShieldCheck, Megaphone } from 'lucide-react';
 import { TopBar } from '../components/TopBar';
-import { DecisionChip, EstTag, Pill, RiskBadge, RoadStateBadge } from '../components/Badges';
+import { DECISION_BAR, DecisionChip, EstTag, Pill, RiskBadge, RoadStateBadge } from '../components/Badges';
 import { Button, Card, CardHeader, PageBody, Tabs, Td, Th, cx } from '../components/ui';
 import { useApp } from '../state/AppContext';
 import { useCorridor } from '../state/selectors';
@@ -13,9 +13,9 @@ import { fmtClock, fmtTime, fmtWait } from '../lib/format';
 
 const Line: React.FC<{ icon: React.ReactNode; label: string; children: React.ReactNode }> = ({ icon, label, children }) => (
   <div className="flex items-start gap-2 text-[13px]">
-    <span className="text-[#6B7280] mt-0.5">{icon}</span>
-    <span className="text-[#6B7280] w-24 shrink-0">{label}</span>
-    <span className="text-[#1F2933] font-medium min-w-0">{children}</span>
+    <span className="text-ink-2 mt-0.5">{icon}</span>
+    <span className="text-ink-2 w-24 shrink-0">{label}</span>
+    <span className="text-ink font-medium min-w-0">{children}</span>
   </div>
 );
 
@@ -33,23 +33,20 @@ const ZoneCard: React.FC<{ zone: ApproachZone; d: ZoneDecision }> = ({ zone, d }
   const hasDiversion = (zone.diversionRoutes?.length ?? 0) > 0;
 
   return (
-    <Card>
-      <div className="px-4 py-3 border-b border-[#E7E3DA] flex items-start justify-between gap-3">
+    <Card className="relative overflow-hidden">
+      <span className={cx('absolute left-0 inset-y-0 w-1', DECISION_BAR[r.closeRecommended ? 'CLOSE' : r.decision])} aria-hidden />
+      <div className="pl-5 pr-4 py-3 border-b border-line flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[13px] font-semibold">
+          <div className="text-[14px] font-semibold">
             <span className="font-mono mr-1.5">{zone.id}</span>
-            <span className="text-[#6B7280] font-medium">{zone.direction} · km {zone.locationKm.toFixed(1)}</span>
+            <span className="text-ink-2 font-medium">{zone.direction} · km {zone.locationKm.toFixed(1)}</span>
           </div>
-          <div className="text-xs text-[#6B7280] mt-0.5 flex items-center gap-1.5 flex-wrap">
-            <span>{seg.id} {seg.name}</span>
-            <RiskBadge level={seg.riskLevel} />
-            <RoadStateBadge state={seg.roadState} />
-          </div>
+          <div className="text-xs text-ink-3 mt-0.5">{zone.extentKm} km approach · {seg.id}</div>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
           <DecisionChip decision={r.decision} size="lg" />
           {d.heavyResult && (
-            <span className="flex items-center gap-1 text-[11px] text-[#6B7280]">
+            <span className="flex items-center gap-1 text-[11px] text-ink-2">
               Heavy <DecisionChip decision={d.heavyResult.decision} />
             </span>
           )}
@@ -57,7 +54,7 @@ const ZoneCard: React.FC<{ zone: ApproachZone; d: ZoneDecision }> = ({ zone, d }
         </div>
       </div>
 
-      <div className="px-4 py-3 space-y-2">
+      <div className="pl-5 pr-4 py-3 space-y-2">
         {r.aheadSegmentId && (
           <Line icon={<AlertTriangle className="w-3.5 h-3.5" />} label="Ahead">
             {r.aheadSegmentId} {segments[r.aheadSegmentId]?.name}
@@ -85,17 +82,17 @@ const ZoneCard: React.FC<{ zone: ApproachZone; d: ZoneDecision }> = ({ zone, d }
           )}
         </Line>
         {controlRoom && r.windowClosing && (
-          <div className="px-2.5 py-1.5 rounded-md bg-[#FBF1CC] border border-[#F3E29F] text-[#7A5B00] text-xs font-medium flex items-center gap-1.5">
+          <div className="px-2.5 py-1.5 rounded-md bg-dec-caution-bg border border-dec-caution-line text-dec-caution-fg text-xs font-medium flex items-center gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5" /> Window closing
           </div>
         )}
         {d.officerClearedPassage && (
-          <div className="text-xs text-[#2A649C]">Passage cleared · {d.officerClearedPassage.by} · {fmtTime(d.officerClearedPassage.at)}</div>
+          <div className="text-xs text-primary-ink">Passage cleared · {d.officerClearedPassage.by} · {fmtTime(d.officerClearedPassage.at)}</div>
         )}
       </div>
 
-      <div className="px-4 py-2.5 border-t border-[#E7E3DA] flex items-center justify-between gap-2">
-        <span className="text-[11px] text-[#6B7280]">Since {fmtTime(d.at)}</span>
+      <div className="pl-5 pr-4 py-2.5 border-t border-line bg-subtle flex items-center justify-between gap-2">
+        <span className="text-[11px] text-ink-2">Since {fmtTime(d.at)}</span>
         {can('clear_passage') && seg.riskLevel === 'ORANGE' && seg.roadState === 'OPEN' && !d.officerClearedPassage && (
           <Button size="sm" onClick={() => act(s => api.clearPassage(s, zone.id), `${zone.id} passage cleared`)}>
             Clear passage
@@ -142,16 +139,16 @@ const TravellerPreview: React.FC = () => {
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
       <Card className="lg:col-span-4">
         <CardHeader title="Approach zone" />
-        <div className="divide-y divide-[#E7E3DA]">
+        <div className="divide-y divide-line">
           {snap.zones.map(z => (
             <button
               key={z.id}
               onClick={() => setZoneId(z.id)}
-              className={cx('w-full px-4 py-2.5 flex items-center justify-between text-left', z.id === zoneId ? 'bg-[#3780C8]/10' : 'hover:bg-[#FAF8F3]')}
+              className={cx('w-full px-4 py-2.5 flex items-center justify-between text-left', z.id === zoneId ? 'bg-primary-tint' : 'hover:bg-subtle')}
             >
               <span className="text-[13px]">
                 <span className="font-mono font-medium mr-1.5">{z.id}</span>
-                <span className="text-[#6B7280]">{z.direction}</span>
+                <span className="text-ink-2">{z.direction}</span>
               </span>
               <DecisionChip decision={decisionByZone[z.id].result.decision} />
             </button>
@@ -168,7 +165,7 @@ const TravellerPreview: React.FC = () => {
                 <button
                   key={l.code}
                   onClick={() => setLang(l.code)}
-                  className={cx('px-2 h-7 rounded-md text-xs font-medium', lang === l.code ? 'bg-[#3780C8] text-white' : 'text-[#6B7280] hover:bg-[#FAF8F3]')}
+                  className={cx('px-2 h-7 rounded-md text-xs font-medium', lang === l.code ? 'bg-primary text-white' : 'text-ink-2 hover:bg-subtle')}
                 >
                   {l.label}
                 </button>
@@ -177,12 +174,12 @@ const TravellerPreview: React.FC = () => {
           }
         />
         <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="rounded-xl border border-[#E7E3DA] bg-[#FAF8F3] p-4 space-y-3">
+          <div className="rounded-card border border-line bg-subtle p-4 space-y-3">
             <DecisionChip decision={r.decision} size="lg" />
-            <div className="text-[15px] font-semibold text-[#1F2933]">
+            <div className="text-[15px] font-semibold text-ink">
               {r.decision === 'HOLD' ? `Hold at ${r.holdingPoint?.shortName ?? '—'}` : r.decision === 'DIVERT' ? `Divert via ${r.diversionCheck.routeCandidateName}` : r.decision === 'GO_CAUTION' ? 'Proceed with caution' : 'Road open'}
             </div>
-            <div className="text-[13px] text-[#6B7280]">{seg.id} {seg.name}</div>
+            <div className="text-[13px] text-ink-2">{seg.id} {seg.name}</div>
             {r.decision === 'HOLD' && r.closeRecommended && <div className="text-[13px]">No safe diversion</div>}
             {r.decision === 'HOLD' && (
               <div className="text-[13px] flex items-center gap-1.5">
@@ -198,11 +195,11 @@ const TravellerPreview: React.FC = () => {
             )}
           </div>
           <div className="space-y-2">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Text</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-2">Text</div>
             {lang === 'dis' ? (
               <Pill tone="yellow">Native-speaker template pending</Pill>
             ) : (
-              <div className="rounded-md border border-[#E7E3DA] p-3 text-[13px] leading-relaxed">{renderTemplate(fields, lang)}</div>
+              <div className="rounded-md border border-line p-3 text-[13px] leading-relaxed">{renderTemplate(fields, lang)}</div>
             )}
           </div>
         </div>
@@ -222,7 +219,7 @@ const RuleChecks: React.FC = () => {
       />
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-[#FAF8F3] border-b border-[#E7E3DA]">
+          <thead className="bg-subtle border-b border-line">
             <tr>
               <Th>ID</Th>
               <Th>Scenario</Th>
@@ -232,7 +229,7 @@ const RuleChecks: React.FC = () => {
               <Th>Result</Th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#E7E3DA]">
+          <tbody className="divide-y divide-line">
             {results.map(({ s, r }) => (
               <tr key={s.id}>
                 <Td className="font-mono">{s.id}</Td>
@@ -272,6 +269,14 @@ export const DecisionsPage: React.FC = () => {
       goZones: ranked.filter(x => x.r === 2).flatMap(x => x.zones)
     };
   }, [bySegment, decisionByZone]);
+  const summary = useMemo(() => {
+    const c = { HOLD: 0, DIVERT: 0, GO_CAUTION: 0, GO: 0 };
+    snap.zones.forEach(z => {
+      const k = decisionByZone[z.id]?.result.decision;
+      if (k) c[k] += 1;
+    });
+    return c;
+  }, [snap.zones, decisionByZone]);
   const pendingAlert = (segId: string) => snap.approvals.some(a => a.kind === 'alert' && a.segmentId === segId && (a.status === 'pending' || a.status === 'escalated'));
 
   return (
@@ -287,12 +292,26 @@ export const DecisionsPage: React.FC = () => {
             { id: 'checks', label: 'Rule checks' }
           ]}
         />
+        {tab === 'zones' && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-label="Decision summary">
+            {(['HOLD', 'DIVERT', 'GO_CAUTION', 'GO'] as const).map(k => (
+              <div key={k} className="relative bg-surface rounded-card border border-line shadow-card pl-5 pr-4 py-3 flex items-center justify-between overflow-hidden">
+                <span className={cx('absolute left-0 inset-y-0 w-1', DECISION_BAR[k])} aria-hidden />
+                <DecisionChip decision={k} />
+                <span className="text-[24px] leading-7 font-bold text-ink tabular-nums">{summary[k]}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {tab === 'zones' &&
           active.map(({ segId, zones }) => (
-            <div key={segId} className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h2 className="text-[13px] font-semibold text-[#1F2933]">
-                  {segId} {segments[segId].name}
+            <div key={segId} className="space-y-2 pt-1">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-[14px] font-semibold text-ink flex items-center gap-2 min-w-0">
+                  <span className="font-mono text-[13px]">{segId}</span>
+                  <span className="truncate">{segments[segId].name}</span>
+                  <RiskBadge level={segments[segId].riskLevel} />
+                  <RoadStateBadge state={segments[segId].roadState} />
                 </h2>
                 {can('approve_alert') && (
                   <Button size="sm" icon={<Megaphone className="w-3.5 h-3.5" />} disabled={pendingAlert(segId)} onClick={() => act(s => api.draftAlert(s, segId), `Alert drafted · ${segId}`)}>
@@ -312,21 +331,21 @@ export const DecisionsPage: React.FC = () => {
             <button
               onClick={() => setShowGo(v => !v)}
               aria-expanded={showGo}
-              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-[#FAF8F3]"
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-subtle"
             >
               <span className="flex items-center gap-2 text-[13px] font-semibold">
                 {showGo ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 <DecisionChip decision="GO" /> <span>· {goZones.length}</span>
               </span>
-              <span className="text-[11px] text-[#6B7280]">GO · GO caution</span>
+              <span className="text-[11px] text-ink-2">GO · GO caution</span>
             </button>
             {showGo && (
-              <div className="overflow-x-auto border-t border-[#E7E3DA]">
+              <div className="overflow-x-auto border-t border-line">
                 <table className="w-full">
-                  <thead className="bg-[#FAF8F3] border-b border-[#E7E3DA]">
+                  <thead className="bg-subtle border-b border-line">
                     <tr><Th>Zone</Th><Th>Direction</Th><Th>Segment</Th><Th>Risk</Th><Th>Decision</Th><Th>Rule</Th></tr>
                   </thead>
-                  <tbody className="divide-y divide-[#E7E3DA]">
+                  <tbody className="divide-y divide-line">
                     {goZones.map(z => {
                       const d = decisionByZone[z.id];
                       const seg = segments[z.segmentId];

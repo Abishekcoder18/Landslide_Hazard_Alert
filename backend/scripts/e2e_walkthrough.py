@@ -66,6 +66,16 @@ def login(browser, role: str, user: str) -> Page:
     return page
 
 
+def set_rain(page: Page, day: str) -> None:
+    """Set the rainfall date on Configuration; Save is only enabled when the value changed (the reset already
+    applies the backend's SCENARIO_DATE, which may be this day)."""
+    page.fill("input[aria-label='Rainfall date']", day)
+    save = page.get_by_role("button", name="Save configuration")
+    if save.is_enabled():
+        save.click()
+        page.wait_for_timeout(1200)
+
+
 def go(page: Page, path: str) -> None:
     page.goto(f"{FRONT}/#{path}")  # the app uses hash routing
     page.reload()  # a hash change alone keeps the old snapshot and open drawers
@@ -96,18 +106,14 @@ def main() -> int:
 
         adm = login(b, "admin", "admin1")
         go(adm, "/configuration")
-        adm.fill("input[aria-label='Rainfall date']", "2022-05-15")
-        adm.get_by_role("button", name="Save configuration").click()
-        adm.wait_for_timeout(1200)
+        set_rain(adm, "2022-05-15")
         shot(adm, "32-config-imd-rainfall-date.png")
         go(off, "/corridor")
         shot(off, "33-real-corridor-15-may-2022.png")
         storm = api("GET", "/api/snapshot", adm_tok)
         red_storm = sum(s["riskLevel"] == "RED" for s in storm["segments"] if not s.get("offCorridor"))  # NH-27 only
         go(adm, "/configuration")
-        adm.fill("input[aria-label='Rainfall date']", "2022-05-10")
-        adm.get_by_role("button", name="Save configuration").click()
-        adm.wait_for_timeout(1200)
+        set_rain(adm, "2022-05-10")
         calm = api("GET", "/api/snapshot", adm_tok)
         red_calm = sum(s["riskLevel"] == "RED" for s in calm["segments"] if not s.get("offCorridor"))
         print(f"  RED NH-27 segments: 15 May 2022 = {red_storm}, 10 May 2022 = {red_calm}")
@@ -128,6 +134,10 @@ def main() -> int:
             loc.first.fill("Retzol bend")
         pat.get_by_role("button", name="Submit").first.click()
         pat.wait_for_timeout(1500)
+        for _ in range(120):  # the local photo-check model (AI_PROVIDER=ollama) can take minutes
+            if api("GET", "/api/snapshot", adm_tok)["reports"]:
+                break
+            pat.wait_for_timeout(2000)
         shot(pat, "34-report-submitted-real-segment.png")
         rep = api("GET", "/api/snapshot", adm_tok)["reports"][0]
         print(f"  report {rep['id']} segment {rep['segmentId']} route {rep['route']} inside corridor "
