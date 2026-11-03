@@ -66,13 +66,10 @@ class OllamaAI:
         raise AIUnavailable("No photo")
 
     def classify_photo(self, image: Image, *, note: str, location_text: str, captured_at: str) -> dict:
-        """FR-21, same contract as ClaudeAI.classify_photo. `note` is accepted for the same interface but never sent (BR-10)."""
-        # BR-10: the reporter's free-text note is NOT sent to the local model. In the evaluation (docs/PHOTO_EVAL.md,
-        # run 1) a hostile note inside the metadata block flipped 13 of 20 hazard photos to "clear". The class must
-        # come from the photo alone; the officer still sees the note in the review queue.
-        meta = json.dumps({"location": location_text, "captured_at": captured_at}, ensure_ascii=False)
-        out = self._chat(system=PHOTO_SYSTEM, user=f"<report_metadata>\n{meta}\n</report_metadata>\nClassify the photo.",
-                         schema=PHOTO_SCHEMA, images=[self._image_b64(image)])
+        """FR-21, same contract as ClaudeAI.classify_photo. Photo only: note, location text and time are accepted for the
+        same interface but never sent (BR-10, owner decision 2026-11-03). In the evaluation (docs/PHOTO_EVAL.md, run 1)
+        a hostile note in a metadata block flipped 13 of 20 hazard photos to "clear"."""
+        out = self._chat(system=PHOTO_SYSTEM, user="Classify the photo.", schema=PHOTO_SCHEMA, images=[self._image_b64(image)])
         cls = out.get("hazard_class")
         if cls not in HAZARD_CLASSES:
             raise AIUnavailable("Local model returned an unknown class")
