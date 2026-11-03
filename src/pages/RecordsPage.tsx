@@ -34,7 +34,7 @@ export const RecordsPage: React.FC = () => {
           <div className="flex items-center gap-2">
             <select aria-label="Segment filter" className={`${inputClass} !w-44`} value={segFilter} onChange={e => setSegFilter(e.target.value)}>
               <option value="">All segments</option>
-              {snap.segments.map(s => (
+              {snap.segments.filter(s => !s.offCorridor).map(s => (
                 <option key={s.id} value={s.id}>{s.id} {s.name}</option>
               ))}
             </select>

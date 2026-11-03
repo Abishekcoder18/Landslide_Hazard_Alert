@@ -7,15 +7,15 @@ import { Card, CardHeader, Kpi, PageBody, cx } from '../components/ui';
 import { useCorridor } from '../state/selectors';
 
 export const CorridorPage: React.FC = () => {
-  const { snap, segments, holdingPoints, decisionByZone, openIncidentBySegment } = useCorridor();
+  const { snap, segments, corridorSegments, holdingPoints, decisionByZone, openIncidentBySegment } = useCorridor();
   const [selected, setSelected] = useState<string | null>(null);
-  const list = Object.values(segments);
+  const list = corridorSegments;
 
   const atRisk = list.filter(s => s.riskLevel === 'ORANGE' || s.riskLevel === 'RED' || s.roadState === 'BLOCKED').length;
   const holds = Object.values(decisionByZone).filter(d => d.result.decision === 'HOLD' || d.heavyResult?.decision === 'HOLD').length;
   const noData = list.filter(s => s.riskLevel === 'NO_DATA' || s.roadState === 'UNKNOWN').length;
   const openApprovals = snap.approvals.filter(a => a.status === 'pending' || a.status === 'escalated').length;
-  const sample = snap.segments.some(s => s.inputs.sample);
+  const sample = list.some(s => s.inputs.sample);
 
   return (
     <div className="flex flex-col min-h-screen">

@@ -231,7 +231,7 @@ export const ConfigurationPage: React.FC = () => {
             { id: 'parameters', label: 'Parameters' },
             { id: 'zones', label: 'Approach zones', count: snap.zones.length },
             { id: 'holding', label: 'Holding points', count: snap.holdingPoints.length },
-            { id: 'inputs', label: 'Segment inputs', count: snap.segments.length }
+            { id: 'inputs', label: 'Segment inputs', count: snap.segments.filter(s => !s.offCorridor).length }
           ]}
         />
 
@@ -295,7 +295,7 @@ export const ConfigurationPage: React.FC = () => {
               <thead className="bg-[#FAF8F3] border-b border-[#E7E3DA]">
                 <tr><Th>Segment</Th><Th>Susceptibility</Th><Th>Slope °</Th><Th>24h mm</Th><Th>3d mm</Th><Th>7d mm</Th><Th>Incidents</Th><Th>IMD</Th><Th>GSI</Th><Th>Risk</Th><Th /></tr>
               </thead>
-              <tbody className="divide-y divide-[#E7E3DA]">{snap.segments.map(s => <InputRow key={s.id} seg={segments[s.id]} />)}</tbody>
+              <tbody className="divide-y divide-[#E7E3DA]">{snap.segments.filter(s => !s.offCorridor).map(s => <InputRow key={s.id} seg={segments[s.id]} />)}</tbody>
             </table>
           </Card>
         )}

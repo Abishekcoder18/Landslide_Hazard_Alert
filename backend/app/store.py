@@ -189,7 +189,8 @@ class Store:
         """FR-22 inside-corridor check in PostGIS: shortest geodesic distance (km) to any segment."""
         def fn(lat: float, lon: float) -> float:
             row = conn.execute(
-                f"SELECT MIN(ST_Distance(geom::geography, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography)) / 1000.0 FROM {self.t('segments')}",
+                f"SELECT MIN(ST_Distance(geom::geography, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography)) / 1000.0 FROM {self.t('segments')} "
+                "WHERE NOT COALESCE((data->>'offCorridor')::boolean, false)",  # FR-22: NH-27 only, never diversion roads
                 (lon, lat),
             ).fetchone()
             return float(row[0]) if row and row[0] is not None else float("inf")

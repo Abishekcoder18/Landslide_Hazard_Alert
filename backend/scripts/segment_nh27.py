@@ -258,6 +258,12 @@ def build() -> dict:
     counts = landslide_counts(segs)
     hps = holding_points(segs, line, pl)
     zs = zones(segs, hps, line)
+    # Phase 8: keep the OSRM diversion candidates (backend/scripts/osrm_diversions.py) across zone rebuilds.
+    div = REPO / "backend" / "inputs" / "diversions.json"
+    if div.exists():
+        routes = json.loads(div.read_text(encoding="utf-8")).get("zones", {})
+        for z in zs:
+            z["diversionRoutes"] = routes.get(z["id"], [])
     for s in segs:
         s["pastLandslides500m"] = counts[s["id"]]
     return {"line": line, "stats": stats, "segments": segs, "holdingPoints": hps, "zones": zs}

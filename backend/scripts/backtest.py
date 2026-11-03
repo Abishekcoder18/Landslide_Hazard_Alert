@@ -83,7 +83,7 @@ def main() -> int:
         while d <= end:
             s = run_day(conn, schema, d)
             if s:
-                segs = s["segments"]
+                segs = {k: v for k, v in s["segments"].items() if not v.get("offCorridor")}  # NH-27 only (FR-09)
                 if not ahead:  # FR-09 segments ahead per zone (static for the corridor)
                     order = [x["id"] for x in sorted((v for v in segs.values() if not v.get("offCorridor")), key=lambda v: v["startKm"])]
                     ahead = {z["id"]: segments_ahead(z, order, s["holdingPoints"]) for z in s["zones"]}

@@ -241,7 +241,7 @@ const NewReportForm: React.FC = () => {
             <div>
               <Label htmlFor="seg">Segment</Label>
               <select id="seg" className={inputClass} value={segmentId} onChange={e => setSegmentId(e.target.value)}>
-                {Object.values(segments).map(s => (
+                {Object.values(segments).filter(s => !s.offCorridor).map(s => (
                   <option key={s.id} value={s.id}>{s.id} {s.name}</option>
                 ))}
               </select>

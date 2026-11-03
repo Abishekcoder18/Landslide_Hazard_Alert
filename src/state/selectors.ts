@@ -19,7 +19,10 @@ export function index(snap: Snapshot, now: Date) {
   for (const d of snap.decisions) decisionByZone[d.zoneId] = d;
   const openIncidentBySegment: Record<string, Incident> = {};
   for (const i of snap.incidents) if (i.state !== 'reopened_full') openIncidentBySegment[i.segmentId] = i;
-  return { snap, segments, holdingPoints, decisionByZone, openIncidentBySegment };
+  // NH-27 only, in chainage order: diversion-road segments (offCorridor, BR-03 only) are kept out of the corridor
+  // list, KPIs and map colouring (FR-09).
+  const corridorSegments = Object.values(segments).filter(s => !s.offCorridor).sort((a, b) => a.startKm - b.startKm);
+  return { snap, segments, corridorSegments, holdingPoints, decisionByZone, openIncidentBySegment };
 }
 
 export const segLabel = (s: Segment) => `${s.id} ${s.name}`;

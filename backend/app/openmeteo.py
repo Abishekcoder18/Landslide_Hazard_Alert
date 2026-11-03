@@ -39,10 +39,13 @@ def ensure_tables(conn: psycopg.Connection, schema: str) -> None:
 
 
 def cells(conn: psycopg.Connection, schema: str) -> list[tuple[str, float, float]]:
-    """Rain cells used by at least one segment."""
+    """Rain cells used by at least one NH-27 or diversion-road segment."""
+    dv = ""
+    if conn.execute("SELECT to_regclass(%s)", (f"{schema}.ref_diversion_segments",)).fetchone()[0] is not None:
+        dv = f" UNION SELECT data->'features'->>'rainCellId' FROM {schema}.ref_diversion_segments"
     return conn.execute(
         f"SELECT c.cell_id, c.lat, c.lon FROM {schema}.imd_rain_cells c WHERE c.cell_id IN "
-        f"(SELECT DISTINCT data->>'rainCellId' FROM {schema}.segment_features) ORDER BY c.cell_id").fetchall()
+        f"(SELECT DISTINCT data->>'rainCellId' FROM {schema}.segment_features{dv}) ORDER BY c.cell_id").fetchall()
 
 
 def _multi(cs: list[tuple[str, float, float]]) -> dict:

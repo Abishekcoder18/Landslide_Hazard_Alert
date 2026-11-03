@@ -32,7 +32,9 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
   const mapInstanceRef = useRef<L.Map | null>(null);
   const layersGroupRef = useRef<L.FeatureGroup | null>(null);
   const fittedKeyRef = useRef<string>('');
-  const segList = Object.values(segments);
+  // NH-27 only: diversion-road segments (offCorridor) are drawn grey and never risk-coloured (FR-09).
+  const segList = Object.values(segments).filter(s => !s.offCorridor).sort((a, b) => a.startKm - b.startKm);
+  const diversionRoads = Object.values(segments).filter(s => s.offCorridor);
   // Real corridor = 137 x ~1 km segments: segment labels only for the selected or blocked ones.
   const many = segList.length > 20;
   const kmFrom = segList.length ? Math.min(...segList.map(s => s.startKm)) : 0;
@@ -87,8 +89,16 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
     if (map && group) {
       group.clearLayers();
 
+      // Diversion roads (BR-03 candidates, not NH-27): thin grey, not part of the corridor colouring.
+      diversionRoads.forEach(seg => {
+        L.polyline(seg.coordinates, { color: '#9CA3AF', weight: 3, opacity: 0.7, dashArray: '4, 6' })
+          .bindTooltip(`<div style="font-family: Inter, sans-serif; font-size: 12px;">${seg.id} ${seg.name}<br/><span>Diversion road (not NH-27)</span></div>`,
+            { sticky: true, className: 'resilion-map-tooltip' })
+          .addTo(group);
+      });
+
       // Render road segments
-      Object.values(segments).forEach(seg => {
+      segList.forEach(seg => {
         const isSelected = selectedSegmentId === seg.id;
         const color = MAP_LINE_COLORS[seg.riskLevel] || '#9CA3AF';
         const isBlocked = seg.roadState === 'BLOCKED';
@@ -195,9 +205,9 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
       });
 
       // Fit the view to the corridor geometry once per segment set (sample or real NH-27 data).
-      const key = Object.keys(segments).join(',');
+      const key = segList.map(s => s.id).join(',');
       if (key && fittedKeyRef.current !== key) {
-        const pts = Object.values(segments).flatMap(s => s.coordinates) as L.LatLngExpression[];
+        const pts = segList.flatMap(s => s.coordinates) as L.LatLngExpression[];
         if (pts.length) map.fitBounds(L.latLngBounds(pts), { padding: [24, 24] });
         fittedKeyRef.current = key;
       }
@@ -275,7 +285,7 @@ export const CorridorMap: React.FC<CorridorMapProps> = ({
               <div className={many ? 'grid grid-cols-[repeat(auto-fill,minmax(30px,1fr))] gap-y-5 gap-x-1 pt-4' : 'flex items-center justify-between relative'}>
                 {!many && <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-1.5 bg-[#E7E3DA] rounded-full z-0"></div>}
 
-                {Object.values(segments).map(seg => {
+                {segList.map(seg => {
                   const color = MAP_LINE_COLORS[seg.riskLevel] || '#9CA3AF';
                   const isBlocked = seg.roadState === 'BLOCKED';
                   const isSelected = selectedSegmentId === seg.id;

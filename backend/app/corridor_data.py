@@ -77,11 +77,24 @@ def rainfall_for(conn: psycopg.Connection, schema: str, scenario: Union[date, st
     return openmeteo.archive_totals(conn, schema, day), f"Open-Meteo archive · {day.isoformat()}", day.isoformat(), {}
 
 
+def diversion_segments(conn: psycopg.Connection, schema: str) -> list[dict]:
+    """Diversion-road segments from OSRM (backend/scripts/osrm_diversions.py); [] when not built."""
+    if conn.execute("SELECT to_regclass(%s)", (f"{schema}.ref_diversion_segments",)).fetchone()[0] is None:
+        return []
+    return [d for (d,) in conn.execute(f"SELECT data FROM {schema}.ref_diversion_segments ORDER BY pos").fetchall()]
+
+
 def segment_inputs(conn: psycopg.Connection, schema: str, scenario: Union[date, str], now: datetime) -> dict[str, dict]:
-    """Fresh Risk Index inputs per segment from PostGIS (also used as the input feed on refresh)."""
+    """Fresh Risk Index inputs per segment from PostGIS (also used as the input feed on refresh). Diversion-road
+    segments use the same inputs, computed by osrm_diversions.py; outside the data coverage they are missing (No data)."""
     feats = {sid: d for sid, d in conn.execute(f"SELECT segment_id, data FROM {schema}.segment_features").fetchall()}
     scores = {sid: (sc, ver) for sid, sc, ver in conn.execute(
         f"SELECT segment_id, susceptibility_score, model_version FROM {schema}.segment_scores").fetchall()}
+    version = next(iter({v for _, v in scores.values()}), None)
+    for d in diversion_segments(conn, schema):
+        f = d.get("features") or {}
+        feats[d["id"]] = f
+        scores[d["id"]] = (f.get("susceptibilityScore"), version if f.get("susceptibilityScore") is not None else None)
     rain, label, rain_date, updated = rainfall_for(conn, schema, scenario, now)
     never = to_iso(datetime(1970, 1, 1, tzinfo=now.tzinfo))
     out = {}
@@ -109,6 +122,7 @@ def load_corridor(conn: psycopg.Connection, schema: str, scenario_day: Union[dat
     inputs = segment_inputs(conn, schema, scenario_day, now)
     updated = to_iso(now)
     segments = []
+    dvs = diversion_segments(conn, schema)
     for (data,) in conn.execute(f"SELECT data FROM {schema}.ref_segments ORDER BY pos").fetchall():
         sid = data["id"]
         segments.append({
@@ -118,13 +132,24 @@ def load_corridor(conn: psycopg.Connection, schema: str, scenario_day: Union[dat
             "computedAt": updated, "validUntil": updated,
             "inputs": {"imdWarning": "NONE", "gsiBulletin": False, **inputs[sid]},
         })
+    # Diversion-road segments (OSRM, BR-03 only): offCorridor, outside the NH-27 chainage (FR-09); startKm kept after
+    # the corridor so nothing that sorts by chainage can place them on NH-27.
+    end_km = max((x["endKm"] for x in segments), default=0.0)
+    for k, d in enumerate(dvs):
+        segments.append({
+            "id": d["id"], "name": d["name"], "startKm": round(end_km + 1000 + k, 3), "endKm": round(end_km + 1000 + k + d["lengthM"] / 1000, 3),
+            "coordinates": d["coordinates"], "center": d["center"], "offCorridor": True,
+            "roadState": "OPEN", "riskLevel": "NO_DATA", "riskIndex": None, "reasons": [],
+            "computedAt": updated, "validUntil": updated,
+            "inputs": {"imdWarning": "NONE", "gsiBulletin": False, **inputs[d["id"]]},
+        })
     # Two approach zones per segment (owner decision 2026-11), built by backend/scripts/segment_nh27.py.
     zones = [z for (z,) in conn.execute(f"SELECT data FROM {schema}.ref_zones ORDER BY pos").fetchall()]
     hps = [h for (h,) in conn.execute(f"SELECT data FROM {schema}.ref_holding_points ORDER BY pos").fetchall()]
     model = conn.execute(f"SELECT version, trained_at, meta->'validation'->'results'->(meta->>'model') FROM {schema}.model_runs "
                          "ORDER BY trained_at DESC LIMIT 1").fetchone()
     meta = {
-        "source": "postgis", "scenarioDate": scenario_day if isinstance(scenario_day, str) else scenario_day.isoformat(), "segments": len(segments), "zones": len(zones),
+        "source": "postgis", "scenarioDate": scenario_day if isinstance(scenario_day, str) else scenario_day.isoformat(), "segments": len(segments) - len(dvs), "diversionSegments": len(dvs), "zones": len(zones),
         "modelVersion": model[0] if model else None,
         "modelCv": {k: model[2].get(k) for k in ("roc_auc_mean", "roc_auc_std", "pr_auc_mean", "pr_auc_std")} if model and model[2] else None,
     }

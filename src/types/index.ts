@@ -329,6 +329,8 @@ export interface CorridorMeta {
   source: 'postgis' | 'sample';
   scenarioDate?: string;
   segments?: number;
+  /** Diversion-road segments from OSRM (offCorridor, BR-03 only). */
+  diversionSegments?: number;
   zones?: number;
   modelVersion?: string | null;
   modelCv?: { roc_auc_mean: number; roc_auc_std: number; pr_auc_mean: number; pr_auc_std: number } | null;

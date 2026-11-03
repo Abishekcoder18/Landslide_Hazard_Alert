@@ -40,6 +40,9 @@ def ref_copy():
         c.execute(f"CREATE SCHEMA {TEST}")
         for t in REQUIRED:
             c.execute(f"CREATE TABLE {TEST}.{t} AS SELECT * FROM {SRC}.{t}")
+        for t in ("ref_diversion_segments", "imd_rain_cells"):  # optional (Phase 8 OSRM / rain cell coordinates)
+            if c.execute("SELECT to_regclass(%s)", (f"{SRC}.{t}",)).fetchone()[0]:
+                c.execute(f"CREATE TABLE {TEST}.{t} AS SELECT * FROM {SRC}.{t}")
         c.commit()
     yield
     with psycopg.connect(normalize_dsn(DSN)) as c:
@@ -62,13 +65,18 @@ def env(ref_copy, tmp_path):
         yield client, ai, clock, store
 
 
+def nh(s):
+    """NH-27 segments only: diversion-road segments (offCorridor, Phase 8) are scored for BR-03 only."""
+    return [x for x in s["segments"] if not x.get("offCorridor")]
+
+
 def seg(s, sid):
     return next(x for x in s["segments"] if x["id"] == sid)
 
 
 def levels(s):
     out = {}
-    for x in s["segments"]:
+    for x in nh(s):
         out[x["riskLevel"]] = out.get(x["riskLevel"], 0) + 1
     return out
 
@@ -78,16 +86,17 @@ def test_f1_real_segments_model_score_and_dated_rainfall(env):
     client, _, _, store = env
     s = snap(client, login(client, "officer"))
     assert s["corridor"]["source"] == "postgis" and s["corridor"]["modelVersion"].startswith("susc-")
-    assert [x["id"] for x in s["segments"]] == [f"NH27-DH-{i:03d}" for i in range(1, 138)]  # AC-01
-    for x in s["segments"]:
+    assert [x["id"] for x in s["segments"] if not x.get("offCorridor")] == [f"NH27-DH-{i:03d}" for i in range(1, 138)]  # AC-01
+    for x in nh(s):
         i = x["inputs"]
         assert i["sample"] is False and 0 <= i["susceptibilityScore"] <= 1 and i["modelVersion"]
         assert i["rainfallDate"] == "2022-05-10" and i["rainfall7d"] is not None
         assert x["riskLevel"] != "NO_DATA"  # all inputs present
-    assert any("Model susceptibility" in r for x in s["segments"] for r in x["reasons"])
+    assert any("Model susceptibility" in r for x in nh(s) for r in x["reasons"])
     assert len(s["zones"]) == 274 and {z["direction"] for z in s["zones"]} == {"Northbound", "Southbound"}  # 2 per segment
     with store.connect() as conn:
-        n, km = conn.execute("SELECT count(*), sum(ST_Length(geom::geography)) / 1000 FROM segments WHERE ST_IsValid(geom)").fetchone()
+        n, km = conn.execute("SELECT count(*), sum(ST_Length(geom::geography)) / 1000 FROM segments WHERE ST_IsValid(geom) "
+                              "AND NOT COALESCE((data->>'offCorridor')::boolean, false)").fetchone()
     assert n == 137 and 130 < km < 145
 
 
@@ -99,7 +108,7 @@ def test_f1_rainfall_date_switch_raises_risk(env):
     s = snap(client, off)
     storm = levels(s)
     assert storm.get("RED", 0) > calm.get("RED", 0)
-    assert all(x["inputs"]["rainfallDate"] == "2022-05-15" for x in s["segments"])
+    assert all(x["inputs"]["rainfallDate"] == "2022-05-15" for x in nh(s))
     assert s["config"]["scenarioDate"] == "2022-05-15" and s["corridor"]["scenarioDate"] == "2022-05-15"
     storm_closures = [a["id"] for a in s["approvals"] if a["kind"] == "closure" and a["status"] == "pending"]
     assert storm_closures  # Red zone segments -> CLOSE recommended for officer approval (FR-12)
@@ -121,7 +130,7 @@ def test_f1_inputs_refreshed_from_postgis_not_stale(env):
     snap(client, off)
     clock["now"] += timedelta(hours=7)
     s = snap(client, off)
-    assert all(x["riskLevel"] != "NO_DATA" for x in s["segments"])
+    assert all(x["riskLevel"] != "NO_DATA" for x in nh(s))
     assert any(a["action"] == "Inputs refreshed" for a in s["audit"])
 
 
@@ -201,7 +210,7 @@ def test_every_red_or_orange_segment_has_zones(env):
     zones_by_seg: dict[str, set] = {}
     for z in s["zones"]:
         zones_by_seg.setdefault(z["segmentId"], set()).add(z["direction"])
-    risky = [x["id"] for x in s["segments"] if x["riskLevel"] in ("ORANGE", "RED")]
+    risky = [x["id"] for x in nh(s) if x["riskLevel"] in ("ORANGE", "RED")]
     assert risky  # 15 May 2022 has Orange/Red segments
     assert all(zones_by_seg.get(sid) == {"Northbound", "Southbound"} for sid in risky)
     decided = {d["zoneId"] for d in s["decisions"]}
@@ -214,7 +223,7 @@ def test_dry_date_no_zone_on_hold(env):
     admin, off = login(client, "admin"), login(client, "officer")
     assert client.patch("/api/config", json={"scenarioDate": "2022-03-20"}, headers=admin).status_code == 204
     s = snap(client, off)
-    assert max(x["inputs"]["rainfall7d"] for x in s["segments"]) < 5  # dry week in the IMD data
+    assert max(x["inputs"]["rainfall7d"] for x in nh(s)) < 5  # dry week in the IMD data
     holds = [d["zoneId"] for d in s["decisions"] if d["result"]["decision"] == "HOLD" or (d.get("heavyResult") or {}).get("decision") == "HOLD"]
     assert holds == []
 
@@ -223,13 +232,13 @@ def test_sachet_warning_raises_never_lowers_officer(env):
     client, _, clock, store = env
     from app.service import Workflow
     off = login(client, "officer")
-    before = {x["id"]: x["riskLevel"] for x in snap(client, off)["segments"]}
+    before = {x["id"]: x["riskLevel"] for x in nh(snap(client, off))}
     with store.unit_of_work() as (conn, state):
         assert Workflow(state, lambda: clock["now"]).apply_imd_feed("ORANGE", "SACHET TEST-1 · IMD Guwahati · until 03 Nov 12:00")
     s = snap(client, off)
     order = ["GREEN", "YELLOW", "ORANGE", "RED"]
-    assert all(order.index(x["riskLevel"]) >= order.index(before[x["id"]]) for x in s["segments"])  # never lowered
-    assert all(x["inputs"]["imdWarning"] == "ORANGE" and x["inputs"]["imdWarningSource"].startswith("SACHET TEST-1") for x in s["segments"])
+    assert all(order.index(x["riskLevel"]) >= order.index(before[x["id"]]) for x in nh(s))  # never lowered
+    assert all(x["inputs"]["imdWarning"] == "ORANGE" and x["inputs"]["imdWarningSource"].startswith("SACHET TEST-1") for x in nh(s))
     assert any(d["result"]["windowClosing"] for d in s["decisions"])  # BR-11: Yellow + IMD Orange
     # Officer sets RED on one segment; the feed later reports no alert -> officer value stays, feed-owned ones clear.
     client.patch("/api/segments/NH27-DH-108/inputs", json={"imdWarning": "RED"}, headers=login(client, "admin"))
@@ -265,7 +274,7 @@ def test_phase4_openmeteo_archive_and_live(env):
     # live: nothing fetched yet -> No data, never a made-up value
     assert client.patch("/api/config", json={"scenarioDate": "live"}, headers=admin).status_code == 204
     s = snap(client, off)
-    assert all(x["riskLevel"] == "NO_DATA" for x in s["segments"])
+    assert all(x["riskLevel"] == "NO_DATA" for x in nh(s))
     fetched = clock["now"]
     with store.connect() as conn:
         openmeteo.store_live(conn, TEST, {c: {"rainfall24h": 120.0, "rainfall3d": 200.0, "rainfall7d": 260.0, "lastHour": fetched} for c in cells}, fetched)
@@ -277,9 +286,48 @@ def test_phase4_openmeteo_archive_and_live(env):
     s = snap(client, off)
     i = seg(s, SEG)["inputs"]
     assert i["rainfall24h"] == 120.0 and i["rainfallDate"] == "live" and i["sources"]["rainfall"].startswith("Open-Meteo live · fetched")
-    assert all(x["riskLevel"] != "NO_DATA" for x in s["segments"])
+    assert all(x["riskLevel"] != "NO_DATA" for x in nh(s))
     assert any(a["action"] == "Rainfall updated" for a in s["audit"])
     # feed stops: after staleInputHours the inputs are stale -> No data (BR-06), not silently refreshed
     clock["now"] += timedelta(hours=s["config"]["staleInputHours"] + 1)
     s = snap(client, off)
-    assert all(x["riskLevel"] == "NO_DATA" for x in s["segments"])
+    assert all(x["riskLevel"] == "NO_DATA" for x in nh(s))
+
+
+def _has_diversions() -> bool:
+    try:
+        with psycopg.connect(normalize_dsn(DSN), connect_timeout=2) as c:
+            return bool(c.execute("SELECT to_regclass(%s)", (f"{SRC}.ref_diversion_segments",)).fetchone()[0])
+    except Exception:  # noqa: BLE001
+        return False
+
+
+@pytest.mark.skipif(not _has_diversions(), reason="OSRM diversions not built (backend/scripts/osrm_diversions.py)")
+def test_phase8_diversion_roads_are_off_corridor(env):
+    """Phase 8: OSRM diversion-road segments are offCorridor, scored for BR-03 only, never part of the NH-27 chainage,
+    the corridor count or the FR-22 corridor check; changing them changes no decision except a diversion's BR-03 result."""
+    client, _, clock, store = env
+    s = snap(client, login(client, "officer"))
+    dv = [x for x in s["segments"] if x.get("offCorridor")]
+    nh = [x for x in s["segments"] if not x.get("offCorridor")]
+    assert dv and len(nh) == 137 and s["corridor"]["segments"] == 137 and s["corridor"]["diversionSegments"] == len(dv)
+    assert all(x["id"].startswith("DV-") and x["startKm"] > max(n["endKm"] for n in nh) for x in dv)
+    by = {x["id"]: x for x in s["segments"]}
+    routes = [(z["id"], r) for z in s["zones"] for r in z.get("diversionRoutes") or []]
+    assert routes and all(sid in by for _, r in routes for sid in r["segmentIds"])  # every candidate segment is mapped
+    # a DV segment far from NH-27 is not "inside the corridor" for report checks (FR-22)
+    far = max(dv, key=lambda x: min(abs(x["center"][0] - n["center"][0]) + abs(x["center"][1] - n["center"][1]) for n in nh))
+    with store.connect() as conn:
+        assert store.corridor_distance(conn)(far["center"][0], far["center"][1]) > 1.0
+    # BR-03 is the only consumer: decisions with no candidate are unaffected by DV states
+    from app.service import Workflow
+    before = {d["zoneId"]: d["result"]["decision"] for d in s["decisions"]}
+    with store.unit_of_work() as (conn, state):
+        for x in dv:
+            state["segments"][x["id"]]["roadState"] = "BLOCKED"
+        Workflow(state, lambda: clock["now"]).recompute("test: all diversion roads blocked")
+    after = snap(client, login(client, "officer"))
+    for d in after["decisions"]:
+        if before[d["zoneId"]] != "DIVERT":
+            assert d["result"]["decision"] == before[d["zoneId"]], d["zoneId"]
+        assert d["result"]["decision"] != "DIVERT"

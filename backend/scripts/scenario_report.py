@@ -26,7 +26,7 @@ def replay(conn, schema: str, day: date, now: datetime) -> dict:
     state = new_state(now, corridor)
     wf = Workflow(state, lambda: now, "Asia/Kolkata")
     wf.recompute("scenario replay")
-    lv = collections.Counter(s["riskLevel"] for s in state["segments"].values())
+    lv = collections.Counter(s["riskLevel"] for s in state["segments"].values() if not s.get("offCorridor"))  # NH-27 only
     dec = collections.Counter(d["result"]["decision"] for d in state["decisions"].values())
     close = sum(1 for a in state["approvals"] if a["kind"] == "closure")
     return {"state": state, "levels": {k: lv.get(k, 0) for k in LEVELS}, "decisions": dict(dec), "close": close}
