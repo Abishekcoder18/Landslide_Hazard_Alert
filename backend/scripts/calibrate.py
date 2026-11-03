@@ -199,7 +199,7 @@ def write_doc(rows, best, current, stretches, seg_by_pos, hp_name, incidents, mo
               f"**{label(best['setting'])}** — incidents held {best['held']}/{len(incidents)}, stretch hold days median "
               f"{pct(best['median'])} (worst {pct(best['worst'])}), vs the current default {label(current['setting'])}: "
               f"{current['held']}/{len(incidents)}, median {pct(current['median'])} (worst {pct(current['worst'])}). "
-              "Not applied — owner decision.", ""]
+              "**Applied as the default by owner decision A (2026-11-03)** — `DEFAULT_CONFIG` in `src/domain/config.ts` and `backend/app/domain/defaults.py`; editable in Configuration.", ""]
     else:
         L += [f"No setting in the grid holds at least {MIN_HELD} of {len(incidents)} incidents.", ""]
     L += ["**Overfitting warning.** There are only "

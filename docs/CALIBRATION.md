@@ -1,6 +1,6 @@
 # Risk Index calibration (configuration only) — for owner decision
 
-Run 2026-11-03 14:54 India Standard Time by `backend/scripts/calibrate.py`. The app's own Risk Index and decision engine (incl. FR-09 segments ahead, BR-03 with OSRM candidates where built) replayed in memory for 770 days: every May–Sep day 2022–2026 up to 2026-10-29 (765 days; IMD to 2025, Open-Meteo archive 2026), the day before / day of each back-test incident, and 20 Mar / 10 May / 15 May 2022. **Nothing is applied**; BR-01..BR-12 and the engine are unchanged; Yellow stays 30. IMD warnings / GSI bulletins have no history, so they are NONE in the replay.
+Run 2026-11-03 16:05 India Standard Time by `backend/scripts/calibrate.py`. The app's own Risk Index and decision engine (incl. FR-09 segments ahead, BR-03 with OSRM candidates where built) replayed in memory for 770 days: every May–Sep day 2022–2026 up to 2026-10-29 (765 days; IMD to 2025, Open-Meteo archive 2026), the day before / day of each back-test incident, and 20 Mar / 10 May / 15 May 2022. **Nothing is applied**; BR-01..BR-12 and the engine are unchanged; Yellow stays 30. IMD warnings / GSI bulletins have no history, so they are NONE in the replay.
 
 - **Incidents held** = a zone whose segments ahead (to the next holding point) include the incident segment is on HOLD on the day before or the day of; 10 incidents (`backend/inputs/incidents.csv`).
 - **Stretch hold days** = for each of the 6 stretches between consecutive holding points, the share of May–Sep days on which any zone in that stretch is on HOLD; median and worst stretch.
@@ -10,7 +10,8 @@ Run 2026-11-03 14:54 India Standard Time by `backend/scripts/calibrate.py`. The 
 
 | Weights (susc/rain/slope/hist) · thresholds | Incidents held | Stretch hold days, median | worst (stretch) | HOLD 20 Mar | HOLD 10 May | HOLD 15 May |
 |---|---|---|---|---|---|---|
-| 25/45/15/15 · O55 R70 (current default) | 9 / 10 | 38% | 87% (Jatinga Tourist Rest House → Parking near Retzol) | 0 | 37 | 137 |
+| 25/45/15/15 · O55 R75 (default before calibration) | 9 / 10 | 38% | 87% (Jatinga Tourist Rest House → Parking near Retzol) | 0 | 37 | 172 |
+| 25/45/15/15 · O55 R70 | 9 / 10 | 38% | 87% (Jatinga Tourist Rest House → Parking near Retzol) | 0 | 37 | 137 |
 | 25/45/15/15 · O60 R75 **← recommended** | 8 / 10 | 25% | 63% (Jatinga Tourist Rest House → Parking near Retzol) | 0 | 0 | 153 |
 | 25/45/15/15 · O65 R80 | 6 / 10 | 16% | 42% (Parking near Retzol → Silchar side) | 0 | 0 | 153 |
 | 25/45/15/15 · O70 R85 | 4 / 10 | 10% | 29% (Jatinga Tourist Rest House → Parking near Retzol) | 0 | 0 | 152 |
@@ -29,13 +30,13 @@ Run 2026-11-03 14:54 India Standard Time by `backend/scripts/calibrate.py`. The 
 | 15/60/15/10 · O75 R90 | 3 / 10 | 6% | 13% (Parking near Retzol → Silchar side) | 0 | 0 | 153 |
 | 15/60/15/10 · O80 R95 | 3 / 10 | 4% | 10% (Parking near Retzol → Silchar side) | 0 | 0 | 151 |
 
-**Reading the 15 May column.** With the Phase 8 diversion candidates, BR-03 offers real detours (DIVERT) for some zones in front of Red segments when every diversion-road segment is OPEN and Green/Yellow (35 zones with the current default on 15 May 2022). An Orange segment always gives HOLD in the decision table (BR-01/BR-02), so raising the Orange threshold turns some Red segments Orange and their DIVERT zones become HOLD; that is why the 15 May HOLD count can rise with stricter thresholds. Before Phase 8 (no candidates) the current default gave 172 HOLD on 15 May.
+**Reading the 15 May column.** With the Phase 8 diversion candidates, BR-03 offers real detours (DIVERT) for some zones in front of Red segments when every diversion-road segment is OPEN and Green/Yellow (35 zones with 25/45/15/15 · Orange 55 / Red 70 on 15 May 2022). An Orange segment always gives HOLD in the decision table (BR-01/BR-02), so raising the Orange threshold turns some Red segments Orange and their DIVERT zones become HOLD; that is why the 15 May HOLD count can rise with stricter thresholds. Before Phase 8 (no candidates) the current default gave 172 HOLD on 15 May.
 
 ## Recommendation
 
-Lowest median monsoon stretch hold-day share that still holds at least 8 of 10 incidents: **25/45/15/15 · O60 R75** — incidents held 8/10, stretch hold days median 25% (worst 63%), vs the current default 25/45/15/15 · O55 R70: 9/10, median 38% (worst 87%). Not applied — owner decision.
+Lowest median monsoon stretch hold-day share that still holds at least 8 of 10 incidents: **25/45/15/15 · O60 R75** — incidents held 8/10, stretch hold days median 25% (worst 63%), vs the current default 25/45/15/15 · O55 R75: 9/10, median 38% (worst 87%). **Applied as the default by owner decision A (2026-11-03)** — `DEFAULT_CONFIG` in `src/domain/config.ts` and `backend/app/domain/defaults.py`; editable in Configuration.
 
-**Overfitting warning.** There are only 10 incidents (three of them on the same segment, NH27-DH-118, and several dated by publication date), so 'incidents held' moves in steps of 10 percentage points and one mis-dated or mis-located incident changes the ranking. The grid was chosen before looking at results, but picking the best of 18 settings on 10 events will look better here than it will in the next monsoon. Treat the recommendation as a starting point to review with the district, re-check it as new incidents are recorded, and prefer a setting that is good on both measures over one that is best on one. Hold-day shares are not false-alarm rates: the incident list is incomplete.
+**Overfitting warning.** There are only 10 incidents (three of them on the same segment, NH27-DH-118, and several dated by publication date), so 'incidents held' moves in steps of 10 percentage points and one mis-dated or mis-located incident changes the ranking. The grid was chosen before looking at results, but picking the best of 19 settings on 10 events will look better here than it will in the next monsoon. Treat the recommendation as a starting point to review with the district, re-check it as new incidents are recorded, and prefer a setting that is good on both measures over one that is best on one. Hold-day shares are not false-alarm rates: the incident list is incomplete.
 
 ## Longest stretches between holding points
 
@@ -54,7 +55,7 @@ May–Sep hold-day share with the current default: 4%; with the recommended sett
 
 ### Langting → Maibong: 32.9 km (NH27-DH-035 … NH27-DH-068)
 
-May–Sep hold-day share with the current default: 12%; with the recommended setting: 7%.
+May–Sep hold-day share with the current default: 13%; with the recommended setting: 7%.
 
 - Natun Dilokthai (hamlet, osm:12677779565) — 465 m off NH-27, km 33.9
 - Langting (town, osm:245734459) — 116 m off NH-27, km 34.7
@@ -88,7 +89,7 @@ May–Sep hold-day share with the current default: 87%; with the recommended set
 | Stretch | km | Current | Recommended |
 |---|---|---|---|
 | Lumding side → Langting | 33.9 | 4% | 1% |
-| Langting → Maibong | 32.9 | 12% | 7% |
+| Langting → Maibong | 32.9 | 13% | 7% |
 | Maibong → Mahur | 21.0 | 30% | 20% |
 | Mahur → Jatinga Tourist Rest House | 15.0 | 47% | 30% |
 | Jatinga Tourist Rest House → Parking near Retzol | 4.0 | 87% | 63% |
