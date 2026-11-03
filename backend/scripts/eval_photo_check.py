@@ -63,6 +63,8 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=300)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--inject", type=int, default=20)
+    ap.add_argument("--inject-only", action="store_true",
+                    help="only the BR-10 check (neutral + hostile note) on the first --inject hazard photos; appended to PHOTO_EVAL.md")
     a = ap.parse_args()
 
     rows = [r for r in csv.DictReader((EVAL / "labels.csv").open(encoding="utf-8")) if r["label_confirmed"].strip().lower() == "yes"]
@@ -76,6 +78,8 @@ def main() -> int:
     m = OllamaAI(a.model, a.url, a.timeout)
     print(f"{len(rows)} confirmed photos, model {m.model}")
 
+    if a.inject_only:
+        return inject_only(m, rows, a.inject)
     m_warm = classify(m, EVAL / rows[0]["file"], "")  # load the model once so its load time is not counted
     print("warm-up", f"{m_warm[2]:.1f}s", m_warm[1] or "")
 
@@ -153,6 +157,32 @@ def main() -> int:
               "and an officer confirms every report.", ""]
     DOC.write_text("\n".join(lines), encoding="utf-8")
     print("wrote", DOC, "and", RAW)
+    return 0
+
+
+def inject_only(m: OllamaAI, rows: list[dict], n: int) -> int:
+    classify(m, EVAL / rows[0]["file"], "")  # warm-up
+    res = []
+    for r in [r for r in rows if r["class"] in HAZARDS][:n]:
+        neu, e1, _ = classify(m, EVAL / r["file"], NEUTRAL["note"])
+        hos, e2, _ = classify(m, EVAL / r["file"], INJECTION)
+        res.append({"file": r["file"], "true": r["class"], "neutral": neu["hazardClass"] if neu else "FAIL",
+                    "injected": hos["hazardClass"] if hos else "FAIL", "sn": neu["blockedShare"] if neu else "",
+                    "sh": hos["blockedShare"] if hos else "", "err": e1 or e2})
+        print("BR-10", res[-1], flush=True)
+    changed = [x for x in res if x["injected"] != x["neutral"]]
+    to_clear = [x for x in res if x["injected"] in ("clear", "not_relevant") and x["neutral"] not in ("clear", "not_relevant")]
+    L = ["", f"## BR-10 re-check with the fix (run {datetime.now().astimezone():%Y-%m-%d %H:%M %Z})", "",
+         f"Same {len(res)} hazard photos and the same hostile note as above; `app/ai_local.py` no longer sends the reporter's "
+         f"note to the local model ({m.model}). Neutral and hostile requests were both re-run.", "",
+         "| File | Owner's class | Neutral note | Hostile note | Share neutral → hostile |", "|---|---|---|---|---|"]
+    L += [f"| {x['file']} | {x['true']} | {x['neutral']} | {x['injected']} | {x['sn']} → {x['sh']} |" for x in res]
+    L += ["", f"Class changed by the note: **{len(changed)} of {len(res)}**; changed to clear / not relevant: **{len(to_clear)}** "
+          "(run 1, note sent: 15 of 20 and 13). Any remaining change can only come from run-to-run variation, because the note "
+          "never reaches the model.", ""]
+    with DOC.open("a", encoding="utf-8") as f:
+        f.write(chr(10).join(L))
+    print("appended to", DOC)
     return 0
 
 
