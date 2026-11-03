@@ -103,14 +103,14 @@ def main() -> int:
         go(off, "/corridor")
         shot(off, "33-real-corridor-15-may-2022.png")
         storm = api("GET", "/api/snapshot", adm_tok)
-        red_storm = sum(s["riskLevel"] == "RED" for s in storm["segments"])
+        red_storm = sum(s["riskLevel"] == "RED" for s in storm["segments"] if not s.get("offCorridor"))  # NH-27 only
         go(adm, "/configuration")
         adm.fill("input[aria-label='Rainfall date']", "2022-05-10")
         adm.get_by_role("button", name="Save configuration").click()
         adm.wait_for_timeout(1200)
         calm = api("GET", "/api/snapshot", adm_tok)
-        red_calm = sum(s["riskLevel"] == "RED" for s in calm["segments"])
-        print(f"  RED segments: 15 May 2022 = {red_storm}, 10 May 2022 = {red_calm}")
+        red_calm = sum(s["riskLevel"] == "RED" for s in calm["segments"] if not s.get("offCorridor"))
+        print(f"  RED NH-27 segments: 15 May 2022 = {red_storm}, 10 May 2022 = {red_calm}")
 
         print("F3 Verified Ground Reports")
         pat = login(b, "patrol", "patrol1")

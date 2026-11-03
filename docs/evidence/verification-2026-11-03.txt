@@ -84,3 +84,33 @@ console/page errors 0: []
 == findings in this run
 - First live SACHET poll raced the walkthrough's data reset (KeyError 'config'): wipe and re-seed were two transactions. Fixed: reset now wipes and re-seeds in one transaction under the corridor advisory lock (main.py seed_if_needed(wipe=True)); backend tests 65 passed after the fix.
 - After restart the SACHET poll failed with ConnectTimeout (network); the feed failed safe (logged, last values kept, retry in 30 min). A direct fetch earlier in this run succeeded (24 alerts, none for Dima Hasao). Live application of a SACHET label was therefore not observed in this run.
+
+==================================================================
+Phase 10 final verification - 2026-11-03 15:58 IST - commit c5b26f4 + working tree
+==================================================================
+--- npm test
+# tests 54
+# pass 54
+# fail 0
+--- npm run lint (tsc --noEmit)
+> tsc --noEmit
+
+lint exit 0
+--- npm run build
+(!) Some chunks are larger than 500 kB after minification. Consider:
+âœ“ built in 653ms
+--- backend: python -m pytest -q (full suite)
+84 passed, 2 skipped, 1 warning in 74.45s (0:01:14)
+--- backend data venv: pytest tests/test_segments.py tests/test_features.py
+10 passed in 10.86s
+--- RESILION 1 tables (check_public_untouched.py verify)
+checked 11 tables outside resilion2*: UNCHANGED
+--- browser walkthrough (e2e_walkthrough.py, real corridor, Chromium)
+  RED NH-27 segments: 15 May 2022 = 32, 10 May 2022 = 0
+  AZ-108S: HOLD · Jatinga Tourist Rest House · close recommended True · R-BLOCKED-RED-HOLD
+  AZ-108N: HOLD · Silchar side · close recommended True · R-BLOCKED-RED-HOLD
+final: NH27-DH-108 road state OPEN; alerts ['ALR-0921 REOPEN draft CAP=no', 'ALR-0846 CLOSE approved CAP=yes']; decision records 802; audit entries 81
+browser API calls 65, failed 0: []
+console/page errors 0: []
+--- window closing (screenshot_window_closing.py)
+NH27-DH-108 Yellow (57) + IMD Orange -> Yellow; 35 zones flagged; 0 console/page errors; 0 failed API calls

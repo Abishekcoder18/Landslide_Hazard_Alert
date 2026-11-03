@@ -16,17 +16,18 @@ diversion-road segments (`offCorridor`, BR-03 only). Risk Index defaults 25/45/1
 decision 2026-11-03). The in-browser sample mode (no backend) still uses the 12-segment **sample data**. Nothing here is
 a field result.
 
-## Verification run (2026-11-02)
+## Verification run (2026-11-03, Phase 10 final)
 
 | Check | Result | Evidence |
 |---|---|---|
-| `npm test` | 46 pass, 0 fail | — |
-| `npm run lint` (`tsc --noEmit`) | pass | — |
-| `npm run build` | pass (bundle > 500 kB warning) | — |
-| `backend: python -m pytest -q` | 49 pass, 2 skipped (geometry checks needing geopandas; they run in the data venv) | incl. TS↔Python parity (with model-score cases), real PostGIS, `test_real_corridor.py` (F1/F2/F3 on a copy of the real data) |
-| `backend\.venv-data: pytest tests/test_segments.py tests/test_features.py` | 10 pass | segmentation coverage / no overlap / IDs identical on re-run; features complete with provenance |
-| Browser run on the real corridor (`backend/scripts/e2e_walkthrough.py`, Chromium, FastAPI + PostGIS) | F1 → F3 → F2 complete; 63 API calls, 0 failed, 0 console/page errors | `docs/evidence/30…42-*.png` |
-| RESILION 1 data in the shared database | 11 tables in `public` unchanged (row count + md5) after every step | `backend/scripts/check_public_untouched.py verify` |
+| `npm test` | 54 pass, 0 fail | `docs/evidence/verification-2026-11-03.txt` |
+| `npm run lint` (`tsc --noEmit`) | pass | same |
+| `npm run build` | pass (bundle > 500 kB warning) | same |
+| `backend: python -m pytest -q` (full suite) | 84 pass, 2 skipped (geometry checks needing geopandas; they run in the data venv) | incl. TS↔Python parity (9,600 engine cases + 400 random corridors for FR-09, 0 mismatches), real PostGIS, `test_real_corridor.py` (F1/F2/F3, Phase 4, Phase 8 on a copy of the real data) |
+| `backend\.venv-data: pytest tests/test_segments.py tests/test_features.py` | 10 pass | segmentation coverage / no overlap / stable IDs; features complete |
+| Browser run on the real corridor (`backend/scripts/e2e_walkthrough.py`, Chromium, FastAPI + PostGIS) | F1 → F3 → F2 complete; 65 API calls, 0 failed, 0 console/page errors; 15 May 2022 = 32 Red NH-27 segments, 10 May = 0 | `docs/evidence/30…42-*.png` |
+| Window closing on the real corridor (`backend/scripts/screenshot_window_closing.py`) | NH27-DH-108 Yellow + IMD Orange → stays Yellow, 35 zones flagged, 0 errors | `43/44-window-closing-*.png` |
+| RESILION 1 data in the shared database | 11 tables in `public` unchanged (row count + md5) | `backend/scripts/check_public_untouched.py verify` |
 
 ## Acceptance criteria
 
@@ -89,7 +90,7 @@ EP-03) are complete except ST-14 (deferred).
 git-ignored `backend/data/` and to schema `resilion2`. Data inventory: `docs/DATA_INVENTORY.md`. Model: `docs/MODEL_CARD.md`
 (LightGBM, spatial block CV ROC-AUC 0.791 ± 0.044, PR-AUC 0.305 ± 0.081 vs no-skill 0.095).
 
-## UI evidence (real corridor, 2026-11-02)
+## UI evidence (real corridor, refreshed 2026-11-03)
 
 | Screen | Screenshot |
 |---|---|
@@ -130,13 +131,15 @@ cleared passage through S-07 applies to AZ-06N; the S-07 CAP lists AZ-06N; an of
 no decision. AC-12 test moved from AZ-06N to AZ-06S (AZ-06N now correctly HOLDs). Parity: 400 seeded random corridors
 (`scripts/parity-fixture.ts`, `test_parity.py::test_segments_ahead_matches_typescript`), 0 mismatches.
 
-**Real corridor (137 segments, 274 zones, default weights 25/45/15/15):**
+**Real corridor (137 segments, 274 zones, weights 25/45/15/15, thresholds before calibration 30/55/75, no diversion candidates yet):**
 
 | IMD rainfall date | Zones HOLD (before the fix) | of which a segment ahead decides | CLOSE recommended (segments) |
 |---|---|---|---|
 | 2022-03-20 | 0 (0) | 0 | 0 |
 | 2022-05-10 | 37 (6) | 31 | 0 |
 | 2022-05-15 | 172 (110) | 62 | 32 |
+
+With the calibrated thresholds 30/60/75 and the Phase 8 candidates (2026-11-03): 20 Mar 0 HOLD; 10 May 0 HOLD; 13 May 153 HOLD (71 because of a segment ahead), 10 CLOSE; 15 May 153 HOLD (55 ahead), 32 CLOSE; no DIVERT on these dates.
 
 ## Owner decisions, 2026-11
 
@@ -189,7 +192,7 @@ Delegated by the owner (Abishek) and implemented as stated; BR-01..BR-12 are unc
 | Core fix FR-09 | Done — zones evaluated over the segments ahead | section above |
 | Calibration | Done — Orange 60 / Red 75 applied (owner decision A) | `docs/CALIBRATION.md` |
 | "Clear hides a hazard" | Done — clear / not relevant from field staff or below the confidence threshold → officer queue | `reportChecks.test.ts`, `test_workflow.py` |
-| 10 Verify and document | Final run: see the verification section | `docs/evidence/verification-2026-11-03.txt` |
+| 10 Verify and document | Done — all checks pass (table at the top) | `docs/evidence/verification-2026-11-03.txt` |
 
 ## Contradictions / decisions to note
 
