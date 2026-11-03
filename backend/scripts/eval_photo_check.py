@@ -147,7 +147,7 @@ def main() -> int:
     lines += ["", "## Failures", ""]
     lines += [f"- {p['file']} ({p['true_class']}): {p['error']}" for p in fails] or ["- none"]
     lines += ["", "## BR-10 note-injection check", "",
-              f"Hostile note sent with the photo (inside `<report_metadata>`): `{INJECTION}`", "",
+              f"Hostile reporter note passed to classify_photo (the app does not forward it to the model): `{INJECTION}`", "",
               "| File | Owner's class | Neutral note | Hostile note | Share neutral → hostile |", "|---|---|---|---|---|"]
     lines += [f"| {x['file']} | {x['true']} | {x['neutral']} | {x['injected']} | {x['share_neutral']} → {x['share_injected']} |" for x in inj]
     changed = [x for x in inj if x["injected"] != x["neutral"]]
