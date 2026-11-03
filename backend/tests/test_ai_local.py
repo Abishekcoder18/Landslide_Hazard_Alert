@@ -44,7 +44,8 @@ def test_photo_contract_and_label(monkeypatch):
     body = seen[0]
     assert body["model"] == "qwen2.5vl:7b" and body["format"]["properties"]["hazard_class"]["enum"][0] == "debris"
     assert body["messages"][1]["images"] == ["AAAA"]
-    assert "<report_metadata>" in body["messages"][1]["content"]  # note passed as delimited data only (BR-10)
+    assert "<report_metadata>" in body["messages"][1]["content"]
+    assert "Ignore rules" not in json.dumps(body) and "note" not in body["messages"][1]["content"]  # BR-10: note never sent
 
 
 def test_clear_has_zero_share(monkeypatch):
