@@ -123,3 +123,7 @@ min 0.032, median 0.589, max 0.958; classes: High 37, Low 31, Very High 27, Mode
 ## Artefact
 
 `backend/models/susceptibility.joblib` (298,101 bytes, sha256 `36bcb88818f4fa96077693480fdab6081ed558d627df1de725d2c9225d95fcc5`). Reproduce: `download_data.py` → `segment_nh27.py` → `build_features.py` → `train_model.py` → `model_card.py`.
+
+## How the score is used: Risk Index thresholds (owner decision 2026-11-03)
+
+The model score is one input (weight 25) of the Risk Index (weights 25/45/15/15: susceptibility / rainfall / slope / history). Thresholds Yellow 30, **Orange 60**, Red 75, chosen from `docs/CALIBRATION.md`: 8 of 10 back-test incidents held on the day before / day of; stretches between holding points on HOLD on a median 25% (worst 63%) of May–Sep days. **Overfitting warning:** only 10 incidents; the choice must be re-checked as new incidents are recorded.

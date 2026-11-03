@@ -44,10 +44,15 @@ WEIGHTS = [(25, 45, 15, 15), (20, 55, 15, 10), (15, 60, 15, 10)]
 ORANGES = [55, 60, 65, 70, 75, 80]
 CHECK_DAYS = [date(2022, 3, 20), date(2022, 5, 10), date(2022, 5, 15)]
 MIN_HELD = 8
-NOTE_15_MAY = ('**Reading the 15 May column.** With the Phase 8 diversion candidates, BR-03 offers real detours (DIVERT) for some zones in front of Red segments when every diversion-road segment is OPEN and Green/Yellow (35 zones with the current default on 15 May 2022). An Orange segment always gives HOLD in the decision table (BR-01/BR-02), so raising the Orange threshold turns some Red segments Orange and their DIVERT zones become HOLD; that is why the 15 May HOLD count can rise with stricter thresholds. Before Phase 8 (no candidates) the current default gave 172 HOLD on 15 May.')
+NOTE_15_MAY = ('**Reading the 15 May column.** With the Phase 8 diversion candidates, BR-03 offers real detours (DIVERT) for some zones in front of Red segments when every diversion-road segment is OPEN and Green/Yellow (35 zones with 25/45/15/15 · Orange 55 / Red 70 on 15 May 2022). An Orange segment always gives HOLD in the decision table (BR-01/BR-02), so raising the Orange threshold turns some Red segments Orange and their DIVERT zones become HOLD; that is why the 15 May HOLD count can rise with stricter thresholds. Before Phase 8 (no candidates) the current default gave 172 HOLD on 15 May.')
+
+
+CURRENT = {"weights": {"susceptibility": 25, "rainfall": 45, "slope": 15, "history": 15},
+           "thresholds": {"yellow": 30, "orange": 55, "red": 75}}  # DEFAULT_CONFIG before calibration
 
 
 def settings():
+    yield CURRENT  # the actual default (Red is not Orange + 15 here), for comparison
     for w in WEIGHTS:
         for o in ORANGES:
             yield {"weights": dict(zip(("susceptibility", "rainfall", "slope", "history"), w)),
@@ -135,9 +140,9 @@ def main() -> int:
         rows.append({"setting": st, "held": held, "median": statistics.median(shares), "worst": max(shares),
                      "worstStretch": shares.index(max(shares)), "shares": shares,
                      "check": [sum(hd[d].values()) for d in CHECK_DAYS]})
-    ok = [r for r in rows if r["held"] >= MIN_HELD]
+    ok = [r for r in rows[1:] if r["held"] >= MIN_HELD]  # the grid only
     best = min(ok, key=lambda r: (r["median"], r["worst"])) if ok else None
-    current = rows[0]  # 25/45/15/15, Orange 55, Red 70 = today's default
+    current = rows[0]  # CURRENT: the default before calibration (Orange 55, Red 75)
     write_doc(rows, best, current, stretches, seg_by_pos, hp_name, incidents, mon, len(days), last)
     print(f"done in {time.time() - t0:.0f} s -> {DOC}")
     return 0
@@ -185,7 +190,7 @@ def write_doc(rows, best, current, stretches, seg_by_pos, hp_name, incidents, mo
          "| Weights (susc/rain/slope/hist) · thresholds | Incidents held | Stretch hold days, median | worst (stretch) | HOLD 20 Mar | HOLD 10 May | HOLD 15 May |",
          "|---|---|---|---|---|---|---|"]
     for r in rows:
-        mark = " **← recommended**" if r is best else (" (current default)" if r is current else "")
+        mark = " **← recommended**" if r is best else (" (default before calibration)" if r is current else "")
         L.append(f"| {label(r['setting'])}{mark} | {r['held']} / {len(incidents)} | {pct(r['median'])} | {pct(r['worst'])} "
                  f"({sname(r['worstStretch'])}) | {r['check'][0]} | {r['check'][1]} | {r['check'][2]} |")
     L += ["", NOTE_15_MAY, "", "## Recommendation", ""]

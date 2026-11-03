@@ -2,7 +2,7 @@
 
 DEFAULT_CONFIG: dict = {
     "weights": {"susceptibility": 25, "rainfall": 45, "slope": 15, "history": 15},
-    "thresholds": {"yellow": 30, "orange": 55, "red": 75},
+    "thresholds": {"yellow": 30, "orange": 60, "red": 75},
     "validityHours": 6,
     "staleInputHours": 6,
     "approachZoneExtentKm": 2.5,

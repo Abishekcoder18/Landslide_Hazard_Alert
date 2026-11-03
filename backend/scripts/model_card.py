@@ -95,6 +95,7 @@ def main() -> int:
           "## Artefact", "",
           f"`backend/models/{m['artifact']['file']}` ({m['artifact']['bytes']:,} bytes, sha256 `{m['artifact']['sha256']}`). "
           "Reproduce: `download_data.py` → `segment_nh27.py` → `build_features.py` → `train_model.py` → `model_card.py`.", ""]
+    L += ['', '## How the score is used: Risk Index thresholds (owner decision 2026-11-03)', '', 'The model score is one input (weight 25) of the Risk Index (weights 25/45/15/15: susceptibility / rainfall / slope / history). Thresholds Yellow 30, **Orange 60**, Red 75, chosen from `docs/CALIBRATION.md`: 8 of 10 back-test incidents held on the day before / day of; stretches between holding points on HOLD on a median 25% (worst 63%) of May–Sep days. **Overfitting warning:** only 10 incidents; the choice must be re-checked as new incidents are recorded.', '']  # owner decision, not from model_meta.json
     out = C.REPO / "docs" / "MODEL_CARD.md"
     out.write_text("\n".join(L), encoding="utf-8")
     print("wrote", out)
