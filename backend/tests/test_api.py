@@ -185,6 +185,27 @@ def test_escalation_and_append_only_audit(env):
         conn.execute("UPDATE audit_log SET data = '{}'::jsonb")  # FR-34
 
 
+def test_st12_equipment_add_remove_logged(env):
+    """ST-12: equipment on an incident can be added and removed; each change is in the incident log and the audit
+    trail; a patrol user may not change it."""
+    client, *_ = env
+    off, eng = login(client, "officer"), login(client, "road_engineer")
+    client.post("/api/reports/REP-0104/confirm", json={"newState": "BLOCKED"}, headers=off)
+    apr = next(a for a in snap(client, off)["approvals"] if a["kind"] == "closure")
+    client.post(f"/api/approvals/{apr['id']}/decision", json={"approve": True, "closureType": "FULL"}, headers=off)
+    iid = snap(client, off)["incidents"][0]["id"]
+    assert client.patch(f"/api/incidents/{iid}", json={"equipment": ["JCB excavator", "Tipper truck"]}, headers=eng).status_code == 204
+    assert snap(client, off)["incidents"][0]["equipment"] == ["JCB excavator", "Tipper truck"]
+    assert client.patch(f"/api/incidents/{iid}", json={"equipment": ["JCB excavator"]}, headers=eng).status_code == 204
+    s = snap(client, off)
+    inc = s["incidents"][0]
+    assert inc["equipment"] == ["JCB excavator"]
+    assert [x["text"] for x in inc["log"] if x["text"].startswith("Equipment")] == ["Equipment · 2 items", "Equipment · 1 items"]
+    assert sum(a["action"] == "Incident updated" and "equipment" in a["details"] for a in s["audit"]) == 2
+    assert client.patch(f"/api/incidents/{iid}", json={"equipment": []}, headers=login(client, "patrol")).status_code == 403
+    assert snap(client, off)["incidents"][0]["equipment"] == ["JCB excavator"]
+
+
 def test_reopening_flow_and_expected_wait(env):
     client, _, clock, _ = env
     off, eng = login(client, "officer"), login(client, "road_engineer")

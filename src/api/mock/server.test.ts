@@ -181,3 +181,23 @@ test('FR-12: a CLOSE recommendation the rules no longer support is withdrawn, ne
   assert.ok(snap.audit.some(e => e.action === 'CLOSE recommendation withdrawn' && e.entity === apr!.id));
   assert.throws(() => server.decideApproval(as('officer'), apr!.id, true));
 });
+
+test('ST-12: equipment added and removed on an incident; every change logged; patrol may not', () => {
+  const { server, as } = setup();
+  const officer = as('officer');
+  const eng = as('road_engineer');
+  server.confirmReport(officer, 'REP-0104', 'BLOCKED');
+  server.decideApproval(officer, server.snapshot().approvals.find(a => a.kind === 'closure')!.id, true, 'FULL');
+  const id = server.snapshot().incidents.find(i => i.segmentId === 'S-07')!.id;
+  server.updateIncident(eng, id, { equipment: ['JCB excavator', 'Tipper truck'] });
+  let inc = server.snapshot().incidents.find(i => i.id === id)!;
+  assert.deepEqual(inc.equipment, ['JCB excavator', 'Tipper truck']);
+  server.updateIncident(eng, id, { equipment: ['JCB excavator'] });
+  const snap = server.snapshot();
+  inc = snap.incidents.find(i => i.id === id)!;
+  assert.deepEqual(inc.equipment, ['JCB excavator']);
+  assert.deepEqual(inc.log.filter(l => l.text.startsWith('Equipment')).map(l => l.text), ['Equipment · 2 items', 'Equipment · 1 items']);
+  assert.equal(snap.audit.filter(a => a.action === 'Incident updated' && a.details.includes('equipment')).length, 2);
+  assert.throws(() => server.updateIncident(as('patrol'), id, { equipment: [] }));
+  assert.deepEqual(server.snapshot().incidents.find(i => i.id === id)!.equipment, ['JCB excavator']);
+});
