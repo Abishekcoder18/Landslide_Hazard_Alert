@@ -260,10 +260,12 @@ export const DecisionsPage: React.FC = () => {
     snap.zones.forEach(z => m.set(z.segmentId, [...(m.get(z.segmentId) ?? []), z]));
     return [...m.entries()];
   }, [snap.zones]);
-  // Action first: CLOSE recommended, then HOLD/DIVERT (incl. heavy-vehicle HOLD); all-GO segments collapse into one row.
+  // Action first: CLOSE recommended, then HOLD/DIVERT (incl. heavy-vehicle HOLD) and window closing (FR-16: the flag must
+  // be visible, so those zones are never folded away); all other GO segments collapse into one row.
   const { active, goZones } = useMemo(() => {
     const rank = (d?: ZoneDecision) =>
-      !d ? 2 : d.result.closeRecommended ? 0 : ['HOLD', 'DIVERT'].includes(d.result.decision) || d.heavyResult?.decision === 'HOLD' ? 1 : 2;
+      !d ? 2 : d.result.closeRecommended ? 0
+        : ['HOLD', 'DIVERT'].includes(d.result.decision) || d.heavyResult?.decision === 'HOLD' || d.result.windowClosing ? 1 : 2;
     const ranked = bySegment.map(([segId, zones], i) => ({ segId, zones, i, r: Math.min(...zones.map(z => rank(decisionByZone[z.id]))) }));
     return {
       active: ranked.filter(x => x.r < 2).sort((a, b) => a.r - b.r || a.i - b.i),

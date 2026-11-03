@@ -43,7 +43,7 @@ a field result.
 | AC-09 | BR-04 next eligible point back | **T U** | `selectHoldingPoint`, `test_real_corridor.py` | Chains from the 7 Provisional holding points (OSM candidates + corridor ends). |
 | AC-10 | FR-12/17 escalation, nothing auto-published | **T U** | `server.test.ts`, `test_api.py`, Approvals | Stale CLOSE recommendations withdrawn by the engine (status "withdrawn", audited); only officers approve. CLOSE only from a segment's own zones (FR-09 fix). |
 | AC-11 | FR-13–15 expected wait = estimate − now, labelled | **T U** | `test_real_corridor.py::test_f2_full_flow_on_real_segment`, `41-decisions-expected-wait-real.png` | |
-| AC-12 | FR-16 window-closing, no hurry wording | **T** | `server.test.ts` / `test_workflow.py` (AC-12, AZ-06S), `test_real_corridor.py` (SACHET), alert validator | Real-corridor screenshot: clean-up 4c. |
+| AC-12 | FR-16 window-closing, no hurry wording | **T U** | `server.test.ts` / `test_workflow.py` (AC-12, AZ-06S), `test_real_corridor.py` (SACHET), alert validator, `43-window-closing-real.png`, `44-window-closing-segment.png` | Real corridor (`scripts/screenshot_window_closing.py`): NH27-DH-108 Yellow (57) + IMD Orange → stays Yellow; its zones and the zones looking at it from behind (FR-09) show "Window closing"; no hurry wording. Window-closing zones are now listed as cards on the Decisions page (they were folded into the GO row, so the flag was not visible). |
 | AC-13 | FR-18 decision, inputs, time stored | **T U** | Records › Decision record, `42-records-real.png` | Append-only in PostGIS. |
 | AC-14 | FR-19/21 class, share blocked, confidence | **T** (local model evaluated; Claude stand-in) | `ai.py`, `ai_local.py`, `test_ai.py`, `test_ai_local.py`, `docs/PHOTO_EVAL.md` | Local model `qwen2.5vl:7b` on 140 owner-labelled photos: 77% accuracy, 0 failures, 8 of 85 hazard photos missed, blocked-share MAE 20.4 pp, 13.4 s/photo. **Claude not run** (no key). Photo only is sent (owner decision B). |
 | AC-15 | FR-22 outside corridor / old → flagged | **T U** | `test_real_corridor.py::test_f3_postgis_corridor_check_on_real_geometry`, `34-*.png` | PostGIS `ST_Distance` to NH-27 only (diversion roads excluded). |
@@ -75,7 +75,7 @@ evaluated on the local model; one run with a real `ANTHROPIC_API_KEY` is still o
 | ST-08 holding point | T U (real segments; Provisional) | ST-21 login | T U (signed token; no password yet) |
 | ST-09 CLOSE + escalation | T U (+ withdrawal) | ST-22 permissions | T U |
 | ST-10 incident log + estimate | T U | ST-23 audit log | T (PostgreSQL trigger blocks UPDATE/DELETE) |
-| ST-11 window closing | T (screenshot: 4c) | ST-24 offline cache | — (deferred) |
+| ST-11 window closing | T U (`43/44-window-closing-*.png`) | ST-24 offline cache | — (deferred) |
 | ST-12 equipment | T U (`test_api.py::test_st12_equipment_add_remove_logged`, `server.test.ts`) | ST-25 SMS | — (deferred) |
 | ST-13 web upload + AI | T U (local model evaluated; Claude pending key) | | |
 
@@ -101,6 +101,7 @@ git-ignored `backend/data/` and to schema `resilion2`. Data inventory: `docs/DAT
 | Decisions after confirmation (HOLD at Lumding / Silchar-side, CLOSE recommended) | `36-decisions-real-hold.png` |
 | Closure → alert → CAP | `37-*.png`, `38-*.png`, `39-cap-real.png` |
 | Incident estimate → expected wait; records | `40-*.png`, `41-*.png`, `42-records-real.png` |
+| Window closing: Yellow NH27-DH-108 + IMD Orange (ST-11 / AC-12) | `43-window-closing-real.png`, `44-window-closing-segment.png` |
 | Earlier sample-mode screens | `01…23-*.png` |
 
 ## Core fix, 2026-11-03 — FR-09 segments ahead
