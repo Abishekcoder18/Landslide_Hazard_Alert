@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MockServer } from './server';
+import { segmentsAhead } from '../../domain/decisionEngine';
 import { Session } from '../../types';
 
 function setup() {
@@ -161,7 +162,8 @@ test('AC-12 end-to-end: Yellow segment + IMD Orange warning -> window-closing fl
   server.updateSegmentInputs(as('admin'), 'S-06', { imdWarning: 'ORANGE' });
   const snap = server.snapshot();
   assert.equal(snap.segments.find(s => s.id === 'S-06')!.riskLevel, 'YELLOW');
-  const d = snap.decisions.find(x => x.zoneId === 'AZ-06N')!;
+  // AZ-06S: AZ-06N now (correctly) HOLDs because Orange S-07 is ahead of it (FR-09).
+  const d = snap.decisions.find(x => x.zoneId === 'AZ-06S')!;
   assert.equal(d.result.windowClosing, true);
   assert.equal(d.result.decision, 'GO_CAUTION');
   assert.doesNotMatch(d.result.travellerAdvisory, /hurry|go now|quickly/i);
@@ -200,4 +202,61 @@ test('ST-12: equipment added and removed on an incident; every change logged; pa
   assert.equal(snap.audit.filter(a => a.action === 'Incident updated' && a.details.includes('equipment')).length, 2);
   assert.throws(() => server.updateIncident(as('patrol'), id, { equipment: [] }));
   assert.deepEqual(server.snapshot().incidents.find(i => i.id === id)!.equipment, ['JCB excavator']);
+});
+
+// ---------- Core fix FR-09: each approach zone is evaluated over the segments ahead ----------
+function aheadOf(snap: ReturnType<MockServer['snapshot']>) {
+  const order = snap.segments.filter(s => !s.offCorridor).sort((a, b) => a.startKm - b.startKm).map(s => s.id);
+  const hps = Object.fromEntries(snap.holdingPoints.map(h => [h.id, h]));
+  return (zoneId: string) => segmentsAhead(snap.zones.find(z => z.id === zoneId)!, order, hps);
+}
+
+test('FR-09: AZ-06N holds because Orange S-07 is ahead (not its own segment)', () => {
+  const { server } = setup();
+  const d = server.snapshot().decisions.find(x => x.zoneId === 'AZ-06N')!;
+  assert.equal(d.result.decision, 'HOLD');
+  assert.equal(d.result.aheadSegmentId, 'S-07');
+  assert.equal(d.result.holdingPoint?.id, 'HP-HAFLONG');
+  assert.equal(d.result.closeRecommended, false);
+});
+
+test('FR-09 / BR-02: after REP-0104 is confirmed BLOCKED no zone says GO toward a blocked or Red/Orange segment ahead', () => {
+  const { server, as } = setup();
+  server.confirmReport(as('officer'), 'REP-0104', 'BLOCKED');
+  const snap = server.snapshot();
+  const ahead = aheadOf(snap);
+  const segs = Object.fromEntries(snap.segments.map(s => [s.id, s]));
+  for (const d of snap.decisions) {
+    const danger = ahead(d.zoneId).some(id => segs[id].roadState === 'BLOCKED' || ['RED', 'ORANGE'].includes(segs[id].riskLevel));
+    if (danger) assert.ok(!['GO', 'GO_CAUTION'].includes(d.result.decision), `${d.zoneId} ${d.result.decision}`);
+  }
+  const s07 = snap.decisions.filter(d => d.segmentId === 'S-07' || d.result.aheadSegmentId === 'S-07');
+  assert.ok(s07.length >= 3, `${s07.length}`);
+  assert.ok(s07.every(d => d.result.decision === 'HOLD'));
+  const pending = (sid: string) => snap.approvals.filter(a => a.kind === 'closure' && a.segmentId === sid && a.status === 'pending').length;
+  assert.equal(pending('S-07'), 1);
+  assert.equal(pending('S-06'), 0);
+});
+
+test('BR-01: officer-cleared passage through Orange S-07 applies to every zone looking at S-07 in that direction', () => {
+  const { server, as } = setup();
+  server.clearPassage(as('officer'), 'AZ-07N');
+  const snap = server.snapshot();
+  assert.equal(snap.decisions.find(d => d.zoneId === 'AZ-07N')!.result.ruleId, 'R-ORANGE-OFFICER-CLEARED');
+  assert.notEqual(snap.decisions.find(d => d.zoneId === 'AZ-06N')!.result.decision, 'HOLD');
+});
+
+test('FR-31: the CAP audience includes zones that hold because the segment is ahead', () => {
+  const { server, as } = setup();
+  const officer = as('officer');
+  server.confirmReport(officer, 'REP-0104', 'BLOCKED');
+  server.decideApproval(officer, server.snapshot().approvals.find(a => a.kind === 'closure' && a.segmentId === 'S-07')!.id, true, 'FULL');
+  let snap = server.snapshot();
+  const alert = snap.alerts.find(a => a.segmentId === 'S-07')!;
+  const expected = snap.decisions.filter(d => d.segmentId === 'S-07' || d.result.aheadSegmentId === 'S-07').map(d => d.zoneId).sort();
+  assert.deepEqual([...alert.zoneIds].sort(), expected);
+  assert.ok(alert.zoneIds.includes('AZ-06N'));
+  server.decideApproval(officer, snap.approvals.find(a => a.kind === 'alert' && a.alertId === alert.id)!.id, true);
+  snap = server.snapshot();
+  assert.match(snap.alerts.find(a => a.id === alert.id)!.capXml ?? '', /AZ-06N/);
 });

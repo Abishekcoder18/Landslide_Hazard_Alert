@@ -59,6 +59,8 @@ export interface Segment {
   computedAt: string;
   validUntil: string;
   inputs: SegmentInputs;
+  /** Diversion-road segment (not NH-27): scored for BR-03 only; excluded from the corridor chainage (FR-09). */
+  offCorridor?: boolean;
 }
 
 export interface DiversionRoute {
@@ -112,6 +114,8 @@ export interface DecisionResult {
   windowClosing: boolean;
   closeRecommended: boolean;
   travellerAdvisory: string;
+  /** FR-09: set when a segment further ahead (before the next holding point), not the zone's own segment, decides. */
+  aheadSegmentId?: string;
 }
 
 /** Current decision per approach zone (FR-09, FR-18). */

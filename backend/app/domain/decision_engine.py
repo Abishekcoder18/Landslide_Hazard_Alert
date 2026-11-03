@@ -164,3 +164,47 @@ def evaluate_approach_zone(
 
     return out(decision="GO_CAUTION", ruleId="R-DEFAULT-SAFE", ruleExplanation=f"Default caution for {sid}.",
                actionText="GO with caution", travellerAdvisory="Drive with caution.")
+
+
+DECISION_RANK = {"GO": 0, "GO_CAUTION": 1, "DIVERT": 2, "HOLD": 3}
+
+
+def segments_ahead(zone: dict, ordered_segment_ids: list[str], holding_points: dict) -> list[str]:
+    """FR-09 "segments ahead": port of segmentsAhead (decisionEngine.ts). Southbound = increasing chainage."""
+    if zone["segmentId"] not in ordered_segment_ids:
+        return [zone["segmentId"]]
+    idx = ordered_segment_ids.index(zone["segmentId"])
+    step = 1 if zone["direction"] == "Southbound" else -1
+    hp_segments = {h["segmentId"] for h in holding_points.values()}
+    out: list[str] = []
+    i = idx
+    while 0 <= i < len(ordered_segment_ids):
+        out.append(ordered_segment_ids[i])
+        if i != idx and ordered_segment_ids[i] in hp_segments:
+            break
+        i += step
+    return out
+
+
+def evaluate_zone_ahead(zone, ahead_ids, segments, holding_points, options_for, diversions_for=lambda sid: []) -> dict:
+    """Port of evaluateZoneAhead: most restrictive over the segments ahead (BR-02), nearest on ties; CLOSE only from
+    the segment's own zones; `aheadSegmentId` when a segment further ahead decides."""
+    best = None
+    any_window = False
+    for sid in ahead_ids:
+        target = segments.get(sid)
+        if not target:
+            continue
+        z = zone if sid == zone["segmentId"] else {**zone, "segmentId": sid, "diversionRoutes": diversions_for(sid) or []}
+        r = evaluate_approach_zone(z, target, segments, holding_points, **options_for(sid))
+        any_window = any_window or r["windowClosing"]
+        if best is None or DECISION_RANK[r["decision"]] > DECISION_RANK[best[0]["decision"]]:
+            best = (r, sid)
+    if best is None:
+        return evaluate_approach_zone(zone, segments[zone["segmentId"]], segments, holding_points, **options_for(zone["segmentId"]))
+    r, sid = best
+    own = sid == zone["segmentId"]
+    out = {**r, "windowClosing": r["decision"] == "GO_CAUTION" and any_window, "closeRecommended": own and r["closeRecommended"]}
+    if not own:
+        out["aheadSegmentId"] = sid
+    return out

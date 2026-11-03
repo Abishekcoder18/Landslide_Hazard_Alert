@@ -11,7 +11,7 @@ from typing import Callable, Optional
 from zoneinfo import ZoneInfo
 
 from .domain.alerts import apply_officer_edit, build_alert_texts, build_cap
-from .domain.decision_engine import evaluate_approach_zone
+from .domain.decision_engine import evaluate_zone_ahead, segments_ahead
 from .domain.defaults import DEFAULT_CONFIG
 from .domain.permissions import ROLE_LABEL, PermissionError_, assert_can, can_decide_approval
 from .domain.report_checks import route_report, run_report_checks
@@ -204,16 +204,34 @@ class Workflow:
         """FR-09 / FR-18: evaluate every approach zone; append to the decision record when a decision changes."""
         now = self.now()
         effective = {k: {**v, "riskLevel": effective_risk_level(v, now)} for k, v in self.s["segments"].items()}
+        # BR-01 overrides end when the zone's own segment is no longer Orange.
+        for zone in self.s["zones"]:
+            if zone["id"] in self.s["overrides"] and effective[zone["segmentId"]]["riskLevel"] != "ORANGE":
+                del self.s["overrides"][zone["id"]]
+        # Officer-cleared passage applies to that segment in that direction for every zone looking at it.
+        cleared = {f"{z['segmentId']}|{z['direction']}" for z in self.s["zones"] if z["id"] in self.s["overrides"]}
+        # FR-09: corridor chainage order; diversion-road segments (offCorridor) are not part of it.
+        order = [x["id"] for x in sorted((v for v in self.s["segments"].values() if not v.get("offCorridor")), key=lambda v: v["startKm"])]
+        zone_of = {f"{z['segmentId']}|{z['direction']}": z for z in self.s["zones"]}
+        estimates = {}
+        for sid in order:
+            inc = self.open_incident(sid)
+            estimates[sid] = parse_iso(inc["reopeningEstimate"]) if inc and inc.get("reopeningEstimate") else None
+        hps = self.s["holdingPoints"]
         for zone in self.s["zones"]:
             target = effective[zone["segmentId"]]
-            inc = self.open_incident(zone["segmentId"])
-            est = parse_iso(inc["reopeningEstimate"]) if inc and inc.get("reopeningEstimate") else None
-            if zone["id"] in self.s["overrides"] and target["riskLevel"] != "ORANGE":
-                del self.s["overrides"][zone["id"]]
             override = self.s["overrides"].get(zone["id"])
-            kw = dict(now=now, reopening_estimate=est, officer_cleared_passage=bool(override))
-            light = evaluate_approach_zone(zone, target, effective, self.s["holdingPoints"], vehicle_type="light", **kw)
-            heavy = evaluate_approach_zone(zone, target, effective, self.s["holdingPoints"], vehicle_type="heavy", **kw)
+            ahead = segments_ahead(zone, order, hps)
+
+            def options_for(vehicle_type: str, direction: str = zone["direction"]):
+                return lambda sid: dict(now=now, vehicle_type=vehicle_type, reopening_estimate=estimates.get(sid),
+                                        officer_cleared_passage=f"{sid}|{direction}" in cleared)
+
+            def diversions_for(sid: str, direction: str = zone["direction"]):
+                return (zone_of.get(f"{sid}|{direction}") or {}).get("diversionRoutes") or []
+
+            light = evaluate_zone_ahead(zone, ahead, effective, hps, options_for("light"), diversions_for)
+            heavy = evaluate_zone_ahead(zone, ahead, effective, hps, options_for("heavy"), diversions_for)
             heavy_result = heavy if heavy["decision"] != light["decision"] else None
 
             prev = self.s["decisions"].get(zone["id"])
@@ -327,7 +345,10 @@ class Workflow:
 
     def create_alert(self, sid: str, template: Optional[str] = None) -> None:
         fields = self.alert_fields(sid, template)
-        alert = {"id": self.next_id("ALR"), "createdAt": self.iso(), "segmentId": sid, "zoneIds": [z["zoneId"] for z in fields["zones"]],
+        # FR-31 CAP audience: the segment's own zones plus every zone that holds because this segment is ahead (FR-09).
+        own = [z["zoneId"] for z in fields["zones"]]
+        ahead = [d["zoneId"] for d in self.s["decisions"].values() if d["result"].get("aheadSegmentId") == sid and d["zoneId"] not in own]
+        alert = {"id": self.next_id("ALR"), "createdAt": self.iso(), "segmentId": sid, "zoneIds": own + ahead,
                  "fields": fields, "texts": build_alert_texts(fields, self.known_places()), "status": "draft"}
         self.s["alerts"].insert(0, alert)
         inc = self.open_incident(sid)

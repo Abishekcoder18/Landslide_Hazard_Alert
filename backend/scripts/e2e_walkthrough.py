@@ -96,7 +96,7 @@ def main() -> int:
 
         adm = login(b, "admin", "admin1")
         go(adm, "/configuration")
-        adm.fill("input[aria-label='IMD rainfall date']", "2022-05-15")
+        adm.fill("input[aria-label='Rainfall date']", "2022-05-15")
         adm.get_by_role("button", name="Save configuration").click()
         adm.wait_for_timeout(1200)
         shot(adm, "32-config-imd-rainfall-date.png")
@@ -105,7 +105,7 @@ def main() -> int:
         storm = api("GET", "/api/snapshot", adm_tok)
         red_storm = sum(s["riskLevel"] == "RED" for s in storm["segments"])
         go(adm, "/configuration")
-        adm.fill("input[aria-label='IMD rainfall date']", "2022-05-10")
+        adm.fill("input[aria-label='Rainfall date']", "2022-05-10")
         adm.get_by_role("button", name="Save configuration").click()
         adm.wait_for_timeout(1200)
         calm = api("GET", "/api/snapshot", adm_tok)

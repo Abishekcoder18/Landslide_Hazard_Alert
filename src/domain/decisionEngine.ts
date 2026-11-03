@@ -357,6 +357,47 @@ export function evaluateApproachZoneDecision(
 /**
  * Scripted correctness test cases for the 12 scenarios verification panel.
  */
+/** BR-02 order: the most restrictive decision wins. */
+export const DECISION_RANK: Record<DecisionType, number> = { GO: 0, GO_CAUTION: 1, DIVERT: 2, HOLD: 3 };
+
+/** FR-09 "segments ahead": segments a traveller in this zone crosses before the next Safe Holding Point ahead (own
+ * segment first). Southbound = increasing chainage. `orderedSegmentIds` is in chainage order. */
+export function segmentsAhead(zone: ApproachZone, orderedSegmentIds: string[], holdingPoints: Record<string, SafeHoldingPoint>): string[] {
+  const idx = orderedSegmentIds.indexOf(zone.segmentId);
+  if (idx < 0) return [zone.segmentId];
+  const step = zone.direction === 'Southbound' ? 1 : -1;
+  const hpSegments = new Set(Object.values(holdingPoints).map(h => h.segmentId));
+  const out: string[] = [];
+  for (let i = idx; i >= 0 && i < orderedSegmentIds.length; i += step) {
+    out.push(orderedSegmentIds[i]);
+    if (i !== idx && hpSegments.has(orderedSegmentIds[i])) break;
+  }
+  return out;
+}
+
+/** Decision for one zone over all segments ahead (FR-09, BR-02): each segment evaluated with the zone's own
+ * holding-point chain (behind the zone, BR-04); most restrictive wins, nearest on ties; CLOSE only from the segment's own zones. */
+export function evaluateZoneAhead(
+  zone: ApproachZone, aheadSegmentIds: string[], allSegments: Record<string, Segment>,
+  holdingPoints: Record<string, SafeHoldingPoint>, optionsFor: (segmentId: string) => EvaluateOptions,
+  diversionsFor: (segmentId: string) => ApproachZone['diversionRoutes'] = () => []
+): DecisionResult {
+  let best: { r: DecisionResult; sid: string } | null = null;
+  let anyWindowClosing = false;
+  for (const sid of aheadSegmentIds) {
+    const target = allSegments[sid];
+    if (!target) continue;
+    const z: ApproachZone = sid === zone.segmentId ? zone : { ...zone, segmentId: sid, diversionRoutes: diversionsFor(sid) ?? [] };
+    const r = evaluateApproachZoneDecision(z, target, allSegments, holdingPoints, optionsFor(sid));
+    anyWindowClosing = anyWindowClosing || r.windowClosing;
+    if (!best || DECISION_RANK[r.decision] > DECISION_RANK[best.r.decision]) best = { r, sid };
+  }
+  if (!best) return evaluateApproachZoneDecision(zone, allSegments[zone.segmentId], allSegments, holdingPoints, optionsFor(zone.segmentId));
+  const own = best.sid === zone.segmentId;
+  return { ...best.r, windowClosing: best.r.decision === 'GO_CAUTION' && anyWindowClosing,
+           closeRecommended: own && best.r.closeRecommended, ...(own ? {} : { aheadSegmentId: best.sid }) };
+}
+
 export interface ScriptedScenario {
   id: string;
   name: string;

@@ -58,6 +58,11 @@ const ZoneCard: React.FC<{ zone: ApproachZone; d: ZoneDecision }> = ({ zone, d }
       </div>
 
       <div className="px-4 py-3 space-y-2">
+        {r.aheadSegmentId && (
+          <Line icon={<AlertTriangle className="w-3.5 h-3.5" />} label="Ahead">
+            {r.aheadSegmentId} {segments[r.aheadSegmentId]?.name}
+          </Line>
+        )}
         <Line icon={<ShieldCheck className="w-3.5 h-3.5" />} label="Rule">
           <span className="font-mono">{r.ruleId}</span>
         </Line>
@@ -105,7 +110,7 @@ function travellerFields(zone: ApproachZone, d: ZoneDecision, segName: string, e
   const r = d.result;
   const template: AlertTemplate = r.closeRecommended ? (r.decision === 'DIVERT' ? 'DIVERT' : 'CLOSE') : r.decision === 'HOLD' ? 'HOLD' : 'CAUTION';
   return {
-    segmentId: zone.segmentId,
+    segmentId: d.result.aheadSegmentId ?? zone.segmentId,
     place: segName,
     template,
     zones: [
@@ -128,8 +133,8 @@ const TravellerPreview: React.FC = () => {
   const [lang, setLang] = useState<'en' | 'hi' | 'as' | 'bn' | 'dis'>('en');
   const zone = snap.zones.find(z => z.id === zoneId)!;
   const d = decisionByZone[zone.id];
-  const seg = segments[zone.segmentId];
-  const inc = openIncidentBySegment[zone.segmentId];
+  const seg = segments[d.result.aheadSegmentId ?? zone.segmentId];
+  const inc = openIncidentBySegment[seg.id];
   const fields = travellerFields(zone, d, seg.name, inc?.reopeningEstimate);
   const r = d.result;
 

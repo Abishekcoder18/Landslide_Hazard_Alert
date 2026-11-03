@@ -4,7 +4,7 @@
  * Run: npx tsx scripts/parity-fixture.ts
  */
 import fs from 'node:fs';
-import { evaluateApproachZoneDecision } from '../src/domain/decisionEngine';
+import { evaluateApproachZoneDecision, evaluateZoneAhead, segmentsAhead } from '../src/domain/decisionEngine';
 import { computeRisk } from '../src/domain/riskIndex';
 import { buildAlertTexts, buildCap, validateAlert, renderTemplate } from '../src/domain/alerts';
 import { DEFAULT_CONFIG } from '../src/domain/config';
@@ -52,6 +52,65 @@ for (const st of STATES) for (const rk of RISKS) for (const vt of ['light', 'hea
       });
       engine.push({ input, output: JSON.parse(JSON.stringify(out)) });
     }
+
+// FR-09 segments ahead: 400 seeded random corridors (mulberry32, seed 2026).
+function mulberry32(seed: number) {
+  return () => {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rnd = mulberry32(2026);
+const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)];
+const IMDS: ImdWarning[] = ['NONE', 'YELLOW', 'ORANGE', 'RED'];
+const corridors: unknown[] = [];
+for (let c = 0; c < 400; c++) {
+  const n = 4 + Math.floor(rnd() * 10);
+  const ids = Array.from({ length: n }, (_, k) => `C${String(k + 1).padStart(2, '0')}`);
+  const segments: Record<string, Segment> = {};
+  ids.forEach((id, k) => (segments[id] = { ...seg(id, pick(STATES), pick(RISKS), pick(IMDS)), startKm: k, endKm: k + 1 }));
+  const hpPos = new Set([0, n - 1]);
+  const extra = 1 + Math.floor(rnd() * 2);
+  for (let e = 0; e < extra; e++) hpPos.add(Math.floor(rnd() * n));
+  const hps: Record<string, SafeHoldingPoint> = {};
+  [...hpPos].sort((a, b) => a - b).forEach(p => (hps[`HP-${p}`] = hp(`HP-${p}`, ids[p])));
+  const zones: ApproachZone[] = [];
+  ids.forEach((id, k) => {
+    for (const direction of ['Southbound', 'Northbound'] as const) {
+      const chain = [...hpPos].filter(p => (direction === 'Southbound' ? p <= k : p >= k))
+        .sort((a, b) => (direction === 'Southbound' ? b - a : a - b)).map(p => `HP-${p}`);
+      let diversionRoutes: ApproachZone['diversionRoutes'] = [];
+      if (rnd() < 0.2) {
+        const did = `D${id.slice(1)}${direction[0]}`;
+        segments[did] = { ...seg(did, pick(STATES), pick(RISKS)), offCorridor: true, startKm: 100 + k, endKm: 101 + k };
+        diversionRoutes = [{ name: `Route ${did}`, segmentIds: [did] }];
+      }
+      zones.push({ id: `Z${id.slice(1)}${direction[0]}`, name: 'zone', direction, segmentId: id, center: [25, 93], extentKm: 2.5,
+        locationKm: k, nearestHoldingPointId: chain[0], fallbackHoldingPointIds: chain.slice(1), diversionRoutes });
+    }
+  });
+  const estimates: Record<string, number> = {};
+  ids.forEach(id => { if (rnd() < 0.3) estimates[id] = Math.round(10 + rnd() * 590); });
+  const cleared = zones.filter(() => rnd() < 0.1).map(z => `${z.segmentId}|${z.direction}`);
+  const order = Object.values(segments).filter(x => !x.offCorridor).sort((a, b) => a.startKm - b.startKm).map(x => x.id);
+  const zoneOf = new Map(zones.map(z => [`${z.segmentId}|${z.direction}`, z] as const));
+  const results = zones.map(zone => {
+    const ahead = segmentsAhead(zone, order, hps);
+    const optionsFor = (vehicleType: 'light' | 'heavy') => (sid: string) => ({
+      now: NOW, vehicleType, officerClearedPassage: cleared.includes(`${sid}|${zone.direction}`),
+      reopeningEstimate: estimates[sid] === undefined ? undefined : new Date(NOW.getTime() + estimates[sid] * 60000)
+    });
+    const diversionsFor = (sid: string) => zoneOf.get(`${sid}|${zone.direction}`)?.diversionRoutes ?? [];
+    return {
+      zoneId: zone.id, ahead,
+      light: JSON.parse(JSON.stringify(evaluateZoneAhead(zone, ahead, segments, hps, optionsFor('light'), diversionsFor))),
+      heavy: JSON.parse(JSON.stringify(evaluateZoneAhead(zone, ahead, segments, hps, optionsFor('heavy'), diversionsFor)))
+    };
+  });
+  corridors.push(JSON.parse(JSON.stringify({ segments, holdingPoints: hps, zones, estimates, cleared, results })));
+}
 
 const risk: unknown[] = [];
 const susc = ['Very Low', 'Low', 'Moderate', 'High', 'Very High'] as const;
@@ -104,5 +163,5 @@ const alerts = fieldsList.map(f => {
 });
 
 fs.mkdirSync('backend/tests/fixtures', { recursive: true });
-fs.writeFileSync('backend/tests/fixtures/parity.json', JSON.stringify({ now: NOW.toISOString(), places: PLACES, config: DEFAULT_CONFIG, engine, risk, alerts }));
-console.log(`engine ${engine.length} · risk ${risk.length} · alerts ${alerts.length}`);
+fs.writeFileSync('backend/tests/fixtures/parity.json', JSON.stringify({ now: NOW.toISOString(), places: PLACES, config: DEFAULT_CONFIG, engine, corridors, risk, alerts }));
+console.log(`engine ${engine.length} · corridors ${corridors.length} · risk ${risk.length} · alerts ${alerts.length}`);

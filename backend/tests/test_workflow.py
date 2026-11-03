@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from app.domain.decision_engine import segments_ahead
 from app.service import ApiError, Workflow, new_state
 from app.domain.timeutil import to_iso
 
@@ -164,7 +165,7 @@ def test_ac12_window_closing_end_to_end():
     e.wf.update_segment_inputs(user("admin"), "S-06", {"imdWarning": "ORANGE"})
     s = e.snap()
     assert seg(s, "S-06")["riskLevel"] == "YELLOW"
-    d = dec(s, "AZ-06N")["result"]
+    d = dec(s, "AZ-06S")["result"]  # AZ-06N now (correctly) HOLDs: Orange S-07 is ahead of it (FR-09)
     assert d["windowClosing"] and d["decision"] == "GO_CAUTION"
 
 
@@ -180,3 +181,63 @@ def test_clear_passage_orange_only_officer():
         e.wf.clear_passage(user("patrol"), "AZ-07N")
     e.wf.clear_passage(user("officer"), "AZ-07N")
     assert dec(e.snap(), "AZ-07N")["result"]["ruleId"] == "R-ORANGE-OFFICER-CLEARED"
+
+
+# ---------- Core fix FR-09: each approach zone is evaluated over the segments ahead (mirrors server.test.ts) ----------
+def ahead_of(s):
+    order = [x["id"] for x in sorted((x for x in s["segments"] if not x.get("offCorridor")), key=lambda x: x["startKm"])]
+    hps = {h["id"]: h for h in s["holdingPoints"]}
+    return lambda zid: segments_ahead(next(z for z in s["zones"] if z["id"] == zid), order, hps)
+
+
+def test_fr09_az06n_holds_for_orange_s07_ahead():
+    r = dec(Env().snap(), "AZ-06N")["result"]
+    assert r["decision"] == "HOLD" and r["aheadSegmentId"] == "S-07"
+    assert r["holdingPoint"]["id"] == "HP-HAFLONG" and r["closeRecommended"] is False
+
+
+def test_fr09_no_go_toward_danger_after_block():
+    e = Env()
+    e.wf.confirm_report(user("officer"), "REP-0104", "BLOCKED")
+    s = e.snap()
+    ahead = ahead_of(s)
+    segs = {x["id"]: x for x in s["segments"]}
+    for d in s["decisions"]:
+        if any(segs[i]["roadState"] == "BLOCKED" or segs[i]["riskLevel"] in ("RED", "ORANGE") for i in ahead(d["zoneId"])):
+            assert d["result"]["decision"] not in ("GO", "GO_CAUTION"), d["zoneId"]
+    s07 = [d for d in s["decisions"] if d["segmentId"] == "S-07" or d["result"].get("aheadSegmentId") == "S-07"]
+    assert len(s07) >= 3 and all(d["result"]["decision"] == "HOLD" for d in s07)
+    pending = lambda sid: sum(a["kind"] == "closure" and a["segmentId"] == sid and a["status"] == "pending" for a in s["approvals"])  # noqa: E731
+    assert pending("S-07") == 1 and pending("S-06") == 0
+
+
+def test_fr09_cleared_passage_applies_per_segment_and_direction():
+    e = Env()
+    e.wf.clear_passage(user("officer"), "AZ-07N")
+    s = e.snap()
+    assert dec(s, "AZ-07N")["result"]["ruleId"] == "R-ORANGE-OFFICER-CLEARED"
+    assert dec(s, "AZ-06N")["result"]["decision"] != "HOLD"
+
+
+def test_fr31_cap_audience_includes_zones_holding_for_segment_ahead():
+    e = Env()
+    officer = user("officer")
+    e.wf.confirm_report(officer, "REP-0104", "BLOCKED")
+    e.wf.decide_approval(officer, next(a for a in e.snap()["approvals"] if a["kind"] == "closure" and a["segmentId"] == "S-07")["id"], True, "FULL")
+    s = e.snap()
+    alert = next(a for a in s["alerts"] if a["segmentId"] == "S-07")
+    expected = sorted(d["zoneId"] for d in s["decisions"] if d["segmentId"] == "S-07" or d["result"].get("aheadSegmentId") == "S-07")
+    assert sorted(alert["zoneIds"]) == expected and "AZ-06N" in alert["zoneIds"]
+    e.wf.decide_approval(officer, next(a for a in s["approvals"] if a["kind"] == "alert" and a.get("alertId") == alert["id"])["id"], True)
+    assert "AZ-06N" in next(a for a in e.snap()["alerts"] if a["id"] == alert["id"])["capXml"]
+
+
+def test_offcorridor_segment_never_changes_corridor_decisions():
+    e = Env()
+    before = {d["zoneId"]: d["result"] for d in e.snap()["decisions"]}
+    dv = {**e.state["segments"]["S-07"], "id": "DV-001", "name": "Diversion road", "offCorridor": True,
+          "roadState": "BLOCKED", "riskLevel": "RED", "startKm": 0.5, "endKm": 1.5}
+    e.state["segments"]["DV-001"] = dv
+    e.wf.recompute("test: diversion-road segment added")
+    after = {d["zoneId"]: d["result"] for d in e.snap()["decisions"]}
+    assert after == before

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from app.domain.alerts import build_alert_texts, build_cap, render_template, validate_alert
-from app.domain.decision_engine import evaluate_approach_zone
+from app.domain.decision_engine import evaluate_approach_zone, evaluate_zone_ahead, segments_ahead
 from app.domain.risk_index import compute_risk
 from app.domain.timeutil import parse_iso
 
@@ -53,6 +53,36 @@ def test_decision_engine_matches_typescript(fx):
             if mismatches == 1:
                 print("first mismatch", i, "\nTS:", case["output"], "\nPY:", out)
     assert mismatches == 0, f"{mismatches}/{len(fx['engine'])} engine cases differ"
+
+
+def test_segments_ahead_matches_typescript(fx):
+    """FR-09: 400 seeded random corridors; identical segments-ahead lists and zone decisions (light and heavy)."""
+    now = parse_iso(fx["now"])
+    mismatches, total = 0, 0
+    for c in fx["corridors"]:
+        segs, hps, zones = c["segments"], c["holdingPoints"], c["zones"]
+        order = [s["id"] for s in sorted((s for s in segs.values() if not s.get("offCorridor")), key=lambda s: s["startKm"])]
+        zone_of = {f"{z['segmentId']}|{z['direction']}": z for z in zones}
+        cleared = set(c["cleared"])
+        for z, want in zip(zones, c["results"]):
+            ahead = segments_ahead(z, order, hps)
+
+            def opts(vt, z=z):
+                return lambda sid: dict(now=now, vehicle_type=vt, officer_cleared_passage=f"{sid}|{z['direction']}" in cleared,
+                                        reopening_estimate=None if sid not in c["estimates"] else now + timedelta(minutes=c["estimates"][sid]))
+
+            def divs(sid, z=z):
+                return (zone_of.get(f"{sid}|{z['direction']}") or {}).get("diversionRoutes") or []
+
+            got = {"zoneId": z["id"], "ahead": ahead,
+                   "light": evaluate_zone_ahead(z, ahead, segs, hps, opts("light"), divs),
+                   "heavy": evaluate_zone_ahead(z, ahead, segs, hps, opts("heavy"), divs)}
+            total += 1
+            if got != want:
+                mismatches += 1
+                if mismatches == 1:
+                    print("first mismatch", z["id"], "TS:", want, "PY:", got)
+    assert total > 2000 and mismatches == 0, f"{mismatches}/{total} zone cases differ"
 
 
 def test_risk_index_matches_typescript(fx):

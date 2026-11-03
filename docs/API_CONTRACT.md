@@ -37,7 +37,17 @@ Payload and response shapes are the TypeScript types in `src/types/index.ts` (PR
 - **Second approver** can decide only `escalated` approvals; `pending` escalates after `config.escalationMinutes` (FR-17, AC-10).
 - **Risk Index** (`src/domain/riskIndex.ts`): weighted rules, IMD/GSI only raise (BR-05), missing/stale → No data (BR-06), 6-hour validity then recompute (BR-12).
 - **Decision engine** (`src/domain/decisionEngine.ts`) runs per approach zone for light and heavy vehicles after every state change; a decision record row is appended only when the decision changes (FR-18).
-- **CLOSE recommendation**: one open closure approval per segment while any zone has `closeRecommended`. When the rules no longer recommend CLOSE (e.g. rainfall fell), a pending/escalated closure approval is withdrawn: `status: "rejected"`, `decidedBy: "Decision engine"`, audit "CLOSE recommendation withdrawn". The engine never approves.
+  - **Segments ahead (FR-09):** each zone is evaluated over every segment a traveller in that zone crosses before the
+    next Safe Holding Point ahead (`segmentsAhead`: own segment first; southbound = increasing chainage; segments with
+    `offCorridor: true` are not in the chainage). Each segment is evaluated with the zone's own holding-point chain
+    (behind the zone, BR-04); the most restrictive decision wins (GO < GO_CAUTION < DIVERT < HOLD, BR-02), the nearest
+    segment on ties (`evaluateZoneAhead`). When a segment further ahead decides, `DecisionResult.aheadSegmentId` names it.
+  - **CLOSE only from the segment's own zones:** `closeRecommended` is true only when the zone's own segment decides.
+  - **Officer-cleared passage (BR-01) is per segment and direction:** clearing passage through an Orange segment from one
+    zone applies to every zone that looks at that segment in the same direction.
+  - **CAP audience (FR-31):** an alert's `zoneIds` are the segment's own zones plus every zone whose current decision has
+    `aheadSegmentId` equal to that segment.
+- **CLOSE recommendation**: one open closure approval per segment while any zone has `closeRecommended`. When the rules no longer recommend CLOSE (e.g. rainfall fell), a pending/escalated closure approval is withdrawn: `status: "withdrawn"`, `decidedBy: "Decision engine"`, audit "CLOSE recommendation withdrawn". The engine never approves.
 - **Reports**: checks and routing in `src/domain/reportChecks.ts`. The note is stored as data and never sent to a model as instructions (BR-10). AI output never changes segment state (BR-07).
 - **Photo check**: Claude Sonnet 5.5 vision, fixed labels `debris | crack | fallen_tree | water | clear | not_relevant`, `blockedShare` 0–100, `confidence` 0–1. On error/timeout: `ai = null`, `aiError` set, route `manual_review` (FR-26). Sample photo IDs (`sample-debris`, `sample-clear`) return labelled sample results.
 - **Alerts**: model output in en/hi/as/bn is validated with `validateAlert` (`src/domain/alerts.ts`); failures are blocked and the plain template is used (BR-09). Dimasa only from native-speaker templates (FR-29). CAP built with `buildCap` after approval (FR-31).
@@ -72,6 +82,8 @@ mode is unchanged):
 |---|---|---|
 | `Approval.status` | `"withdrawn"` | a CLOSE recommendation the rules no longer support, withdrawn by the decision engine (`decidedBy: "Decision engine"`, audit "CLOSE recommendation withdrawn"). Cannot be approved. Replaces the earlier use of `"rejected"` for this case. |
 | `DEFAULT_CONFIG.weights` | 25 / 45 / 15 / 15 | susceptibility / rainfall / slope / history (thresholds unchanged) |
+| `Segment.offCorridor` | optional boolean | diversion-road segment (not NH-27): scored for BR-03 only; excluded from the corridor chainage, list, KPIs and NH-27 map colouring |
+| `DecisionResult.aheadSegmentId` | optional string | FR-09: the segment ahead (not the zone's own) that decides |
 | `Snapshot.zones` | 274 on the real corridor | two per segment: `AZ-<nnn>S` (southbound, before the segment) and `AZ-<nnn>N` (northbound, after it) |
 | `SafeHoldingPoint.capacityVehicles` | `number \| null` | null = unknown (OSM has no capacity); never invented |
 | `SafeHoldingPoint.source`, `.verified`, `.lat`, `.lon` | optional | e.g. `osm:245731951`; `verified` false until the district confirms; real location for the map |

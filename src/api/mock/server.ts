@@ -22,7 +22,7 @@ import {
 } from '../../types';
 import { DEFAULT_CONFIG } from '../../domain/config';
 import { applyRisk, effectiveRiskLevel } from '../../domain/riskIndex';
-import { evaluateApproachZoneDecision } from '../../domain/decisionEngine';
+import { evaluateZoneAhead, segmentsAhead } from '../../domain/decisionEngine';
 import { routeReport, runReportChecks } from '../../domain/reportChecks';
 import { applyOfficerEdit, buildAlertTexts, buildCap } from '../../domain/alerts';
 import { assertCan, canDecideApproval, PermissionError, ROLE_LABEL } from '../../domain/permissions';
@@ -149,15 +149,30 @@ export class MockServer {
     const effective: Record<string, Segment> = {};
     for (const [id, seg] of Object.entries(segs)) effective[id] = { ...seg, riskLevel: effectiveRiskLevel(seg, now) };
 
+    // BR-01 overrides end when the zone's own segment is no longer Orange.
+    for (const zone of this.s.zones) {
+      if (this.s.overrides[zone.id] && effective[zone.segmentId].riskLevel !== 'ORANGE') delete this.s.overrides[zone.id];
+    }
+    // Officer-cleared passage applies to that segment in that direction for every zone looking at it.
+    const cleared = new Set(this.s.zones.filter(z => this.s.overrides[z.id]).map(z => `${z.segmentId}|${z.direction}`));
+    // FR-09: corridor chainage order; diversion-road segments (offCorridor) are not part of it.
+    const order = Object.values(segs).filter(s => !s.offCorridor).sort((a, b) => a.startKm - b.startKm).map(s => s.id);
+    const zoneOf = new Map(this.s.zones.map(z => [`${z.segmentId}|${z.direction}`, z] as const));
+    const estimateOf = (sid: string) => {
+      const inc = this.openIncident(sid);
+      return inc?.reopeningEstimate ? new Date(inc.reopeningEstimate) : undefined;
+    };
+
     for (const zone of this.s.zones) {
       const target = effective[zone.segmentId];
-      const incident = this.openIncident(zone.segmentId);
-      const reopeningEstimate = incident?.reopeningEstimate ? new Date(incident.reopeningEstimate) : undefined;
-      if (this.s.overrides[zone.id] && target.riskLevel !== 'ORANGE') delete this.s.overrides[zone.id];
       const override = this.s.overrides[zone.id];
-      const opts = { now, reopeningEstimate, officerClearedPassage: Boolean(override) };
-      const result = evaluateApproachZoneDecision(zone, target, effective, this.s.holdingPoints, { ...opts, vehicleType: 'light' });
-      const heavy = evaluateApproachZoneDecision(zone, target, effective, this.s.holdingPoints, { ...opts, vehicleType: 'heavy' });
+      const ahead = segmentsAhead(zone, order, this.s.holdingPoints);
+      const optionsFor = (vehicleType: 'light' | 'heavy') => (sid: string) => ({
+        now, vehicleType, reopeningEstimate: estimateOf(sid), officerClearedPassage: cleared.has(`${sid}|${zone.direction}`)
+      });
+      const diversionsFor = (sid: string) => zoneOf.get(`${sid}|${zone.direction}`)?.diversionRoutes ?? [];
+      const result = evaluateZoneAhead(zone, ahead, effective, this.s.holdingPoints, optionsFor('light'), diversionsFor);
+      const heavy = evaluateZoneAhead(zone, ahead, effective, this.s.holdingPoints, optionsFor('heavy'), diversionsFor);
       const heavyResult = heavy.decision !== result.decision ? heavy : undefined;
 
       const prev = this.s.decisions[zone.id];
@@ -296,7 +311,13 @@ export class MockServer {
       id: this.id('ALR'),
       createdAt: this.iso(),
       segmentId,
-      zoneIds: fields.zones.map(z => z.zoneId),
+      // FR-31 CAP audience: the segment's own zones plus every zone that holds because this segment is ahead (FR-09).
+      zoneIds: [
+        ...fields.zones.map(z => z.zoneId),
+        ...Object.values(this.s.decisions)
+          .filter(d => d.result.aheadSegmentId === segmentId && !fields.zones.some(z => z.zoneId === d.zoneId))
+          .map(d => d.zoneId)
+      ],
       fields,
       texts: buildAlertTexts(fields, this.knownPlaces()),
       status: 'draft'

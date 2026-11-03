@@ -100,6 +100,40 @@ git-ignored `backend/data/` and to schema `resilion2`. Data inventory: `docs/DAT
 | Incident estimate → expected wait; records | `40-*.png`, `41-*.png`, `42-records-real.png` |
 | Earlier sample-mode screens | `01…23-*.png` |
 
+## Core fix, 2026-11-03 — FR-09 segments ahead
+
+Found in the cloud review, re-implemented here (the cloud commits could not be transferred).
+
+**Bug.** With two overlapping 2.5 km zones for every ~1 km segment, each zone looked only at its **own** segment. If
+segment k+1 was blocked, the zone of segment k (which overlaps the zone of k+1) said GO while k+1's zone said HOLD, so a
+traveller could get GO toward the blockage. This broke BR-02 and the core rule "stop before the danger zone"; PRD FR-09
+says to apply the decision table to "the segments ahead".
+
+**Fix.** `segmentsAhead` / `evaluateZoneAhead` (`src/domain/decisionEngine.ts`, Python port `segments_ahead` /
+`evaluate_zone_ahead` in `backend/app/domain/decision_engine.py`), used identically by the in-browser server and the
+backend `recompute`:
+- each zone is evaluated over all segments up to the next Safe Holding Point ahead, with the zone's own holding-point
+  chain; the most restrictive decision wins, nearest on ties; `aheadSegmentId` says which segment decided;
+- CLOSE is recommended only from a segment's own zones; officer-cleared passage applies per segment and direction;
+- diversion-road segments (`offCorridor: true`) are excluded from the chainage;
+- CAP audience = the segment's own zones + zones holding because the segment is ahead;
+- Decisions page: "Ahead" line on the zone card; the traveller preview shows the deciding segment.
+
+**Evidence.** `server.test.ts` and `test_workflow.py` (same cases): AZ-06N HOLDs for Orange S-07 ahead
+(`aheadSegmentId` S-07, HP-HAFLONG, no CLOSE); after REP-0104 is confirmed BLOCKED no zone says GO / GO_CAUTION toward a
+blocked or Red/Orange segment ahead, ≥ 3 zones HOLD for S-07, exactly one closure approval (S-07, none for S-06);
+cleared passage through S-07 applies to AZ-06N; the S-07 CAP lists AZ-06N; an off-corridor BLOCKED/RED segment changes
+no decision. AC-12 test moved from AZ-06N to AZ-06S (AZ-06N now correctly HOLDs). Parity: 400 seeded random corridors
+(`scripts/parity-fixture.ts`, `test_parity.py::test_segments_ahead_matches_typescript`), 0 mismatches.
+
+**Real corridor (137 segments, 274 zones, default weights 25/45/15/15):**
+
+| IMD rainfall date | Zones HOLD (before the fix) | of which a segment ahead decides | CLOSE recommended (segments) |
+|---|---|---|---|
+| 2022-03-20 | 0 (0) | 0 | 0 |
+| 2022-05-10 | 37 (6) | 31 | 0 |
+| 2022-05-15 | 172 (110) | 62 | 32 |
+
 ## Owner decisions, 2026-11
 
 Delegated by the owner (Abishek) and implemented as stated; BR-01..BR-12 are unchanged.
