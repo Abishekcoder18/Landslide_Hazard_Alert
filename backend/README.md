@@ -33,9 +33,14 @@ cd backend
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-copy .env.example .env
+# Create .env only on first setup. NEVER copy over an existing .env: it holds the real DATABASE_URL and keys.
+if (!(Test-Path .env)) { copy .env.example .env }
 uvicorn app.main:app --reload --port 8000
 ```
+
+> **Warning:** never overwrite an existing `backend/.env` with `.env.example`. The example's `DATABASE_URL` is a
+> placeholder; copying it over loses the real database URL (and any `ANTHROPIC_API_KEY`), and the backend then falls back
+> to sample data.
 
 Check http://localhost:8000/api/health and http://localhost:8000/docs.
 

@@ -18,6 +18,8 @@ the app's own code on the real NH-27 corridor (137 segments, 274 approach zones)
 ```powershell
 cd E:\resilion-2.0_Landslide_Hazard_Alert\backend
 .venv\Scripts\Activate.ps1
+# Only creates .env if missing. NEVER overwrite an existing .env (it holds the real DATABASE_URL and keys).
+if (!(Test-Path .env)) { copy .env.example .env }
 # Photo check on the local model (no Claude key); omit both lines to run with manual review only.
 $env:AI_PROVIDER = "ollama"; $env:OLLAMA_VISION_MODEL = "qwen2.5vl:7b"
 # Feeds OFF for the demo (historical 15 May 2022 scenario, nothing changes behind your back):
@@ -26,6 +28,9 @@ $env:SCENARIO_DATE = "2022-05-15"
 uvicorn app.main:app --port 8000
 ```
 
+- **Never overwrite an existing `backend\.env`** with `.env.example`: its `DATABASE_URL` is a placeholder, the login
+  fails and the UI shows "Sample data". If that happened, restore the `DATABASE_URL` line (same database as RESILION 1:
+  user `postgres`, `localhost:5432`, database `resilion`).
 - Feeds ON (live SACHET IMD warnings every 30 min, Open-Meteo live rainfall every 60 min while the rainfall date is
   `live`): `$env:FEEDS_ENABLED = "true"` — needs internet. Use only if you want to show live mode; set the rainfall
   date to "Live" in Configuration.
